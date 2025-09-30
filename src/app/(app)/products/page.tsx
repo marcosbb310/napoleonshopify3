@@ -1,7 +1,7 @@
 // Products page - main hub for product management
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useProducts, type ProductFilter, type ProductWithPricing } from '@/features/product-management';
 import {
   ProductCard,
@@ -9,12 +9,13 @@ import {
   BulkEditToolbar,
   ProductFilters,
   SelectionBar,
+  NewProductModal,
 } from '@/features/product-management/components';
 import type { ViewMode } from '@/shared/types';
 import { Card } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
-import { X, ChevronLeft, ChevronRight, Undo2 } from 'lucide-react';
+import { X, Check, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ProductsPage() {
@@ -29,7 +30,7 @@ export default function ProductsPage() {
   const [showingVariantsForProduct, setShowingVariantsForProduct] = useState<string | null>(null);
 
   // Get all products (no loading state for filtering/searching)
-  const { products: allProducts, loading } = useProducts();
+  const { products: allProducts, loading, error, refetch } = useProducts();
   const [products, setProducts] = useState<ProductWithPricing[]>([]);
   const [productUpdates, setProductUpdates] = useState<Map<string, Partial<ProductWithPricing['pricing']>>>(new Map());
   const [lastBulkAction, setLastBulkAction] = useState<{
@@ -190,7 +191,7 @@ export default function ProductsPage() {
     setProducts(filtered);
   }, [allProducts, searchQuery, selectedTags, filter, productUpdates]);
 
-  const handleUpdatePricing = (productId: string, pricing: { basePrice?: number; cost?: number; maxPrice?: number }) => {
+  const handleUpdatePricing = (productId: string, pricing: { basePrice?: number; cost?: number; maxPrice?: number; currentPrice?: number }) => {
     console.log('Updating pricing for product:', productId, pricing);
     
     // Update the updates map
@@ -203,16 +204,6 @@ export default function ProductsPage() {
 
     // TODO: Call Shopify API to update product pricing
     // await shopifyClient.updateProductPrice(productId, pricing);
-  };
-
-  const handleUndo = () => {
-    if (!lastBulkAction) return;
-
-    setProductUpdates(lastBulkAction.updates);
-    toast.success('Changes undone', {
-      description: `Reverted: ${lastBulkAction.description}`,
-    });
-    setLastBulkAction(null);
   };
 
   const handleBulkUpdate = (updates: {
@@ -287,14 +278,67 @@ export default function ProductsPage() {
     // Show success toast
     toast.success('Bulk update applied!', {
       description: description,
-      action: {
-        label: 'Undo',
-        onClick: handleUndo,
-      },
     });
 
     // TODO: Call Shopify API to bulk update product pricing
     // await shopifyClient.bulkUpdateProductPrices(updates);
+  };
+
+  const handleUndo = () => {
+    if (!lastBulkAction) return;
+
+    setProductUpdates(lastBulkAction.updates);
+    toast.success('Changes undone', {
+      description: `Reverted: ${lastBulkAction.description}`,
+    });
+    setLastBulkAction(null);
+  };
+
+  const handleNewProduct = (productData: {
+    title: string;
+    description: string;
+    vendor: string;
+    productType: string;
+    tags: string[];
+    basePrice: number;
+    cost: number;
+    maxPrice: number;
+    currentPrice: number;
+  }) => {
+    // Product was created successfully via API, refresh the products list
+    console.log('New product created:', productData);
+    
+    // Immediate refetch and short retries to get fresh data from Shopify
+    refetch();
+    setTimeout(() => refetch(), 2000);
+    setTimeout(() => refetch(), 5000);
+  };
+
+  const handleDeleteProduct = (productId: string) => {
+    // TODO: Call Shopify API to delete product
+    console.log('Deleting product:', productId);
+    
+    // For now, just show a success message
+    toast.success('Product deleted successfully!');
+    
+    // In a real implementation, this would:
+    // 1. Call the Shopify API to delete the product
+    // 2. Refresh the products list
+    // 3. Remove the product from the UI
+  };
+
+  const handleBulkDelete = (productIds: string[]) => {
+    // TODO: Call Shopify API to bulk delete products
+    console.log('Bulk deleting products:', productIds);
+    
+    // For now, just show a success message
+    toast.success(`${productIds.length} products deleted successfully!`);
+    
+    // In a real implementation, this would:
+    // 1. Call the Shopify API to delete the products
+    // 2. Refresh the products list
+    // 3. Remove the products from the UI
+    // 4. Clear the selection
   };
 
   const handleSelect = (id: string) => {
@@ -331,17 +375,6 @@ export default function ProductsPage() {
     });
   };
 
-  // Get products with multiple variants
-  const productsWithVariants = useMemo(() => {
-    return products.filter(p => p.variants.length > 1);
-  }, [products]);
-
-  // Get current variant product index
-  const currentVariantProductIndex = useMemo(() => {
-    if (!showingVariantsForProduct) return -1;
-    return productsWithVariants.findIndex(p => p.id === showingVariantsForProduct);
-  }, [showingVariantsForProduct, productsWithVariants]);
-
   const handleShowVariants = (productId: string) => {
     setShowingVariantsForProduct(productId);
   };
@@ -349,41 +382,6 @@ export default function ProductsPage() {
   const handleCloseVariants = () => {
     setShowingVariantsForProduct(null);
   };
-
-  const handlePreviousProduct = () => {
-    if (currentVariantProductIndex > 0) {
-      const previousProduct = productsWithVariants[currentVariantProductIndex - 1];
-      setShowingVariantsForProduct(previousProduct.id);
-    }
-  };
-
-  const handleNextProduct = () => {
-    if (currentVariantProductIndex < productsWithVariants.length - 1) {
-      const nextProduct = productsWithVariants[currentVariantProductIndex + 1];
-      setShowingVariantsForProduct(nextProduct.id);
-    }
-  };
-
-  // Keyboard shortcuts for navigation
-  useEffect(() => {
-    if (!showingVariantsForProduct) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        handlePreviousProduct();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        handleNextProduct();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        handleCloseVariants();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showingVariantsForProduct, currentVariantProductIndex, productsWithVariants]);
 
   const selectedProduct = products.find(p => p.id === showingVariantsForProduct);
   
@@ -406,6 +404,7 @@ export default function ProductsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <NewProductModal onProductCreated={handleNewProduct} />
           {lastBulkAction && (
             <Button
               variant="outline"
@@ -421,6 +420,7 @@ export default function ProductsPage() {
             selectedIds={Array.from(selectedIds)}
             totalProductCount={allProducts.length}
             onBulkUpdate={handleBulkUpdate}
+            onBulkDelete={handleBulkDelete}
           />
         </div>
       </div>
@@ -435,13 +435,64 @@ export default function ProductsPage() {
         allProducts={allProducts}
       />
 
+      {/* Select All Button for filtered products */}
+      {!loading && products.length > 0 && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSelectAll}
+              className="gap-2"
+            >
+              {selectedIds.size === products.length ? (
+                <>
+                  <X className="h-4 w-4" />
+                  Deselect All ({products.length})
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" />
+                  Select All ({products.length})
+                </>
+              )}
+            </Button>
+            {selectedIds.size > 0 && (
+              <span className="text-sm text-muted-foreground">
+                {selectedIds.size} of {products.length} products selected
+              </span>
+            )}
+          </div>
+          {selectedIds.size > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearSelection}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Clear Selection
+            </Button>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div className="flex h-64 items-center justify-center">
           <div className="text-center">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
-            <p className="text-muted-foreground">Loading products...</p>
+            <p className="text-muted-foreground">Loading products from Shopify...</p>
           </div>
         </div>
+      ) : error ? (
+        <Card className="flex h-64 items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg font-medium text-destructive">Failed to load products</p>
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <p className="text-xs text-muted-foreground">
+              Using mock data for demonstration. Check your Shopify credentials in .env.local
+            </p>
+          </div>
+        </Card>
       ) : products.length === 0 ? (
         <Card className="flex h-64 items-center justify-center">
           <div className="text-center">
@@ -473,6 +524,7 @@ export default function ProductsPage() {
                 onSelect={handleSelect}
                 onEdit={() => console.log('Edit product:', product)}
                 onUpdatePricing={handleUpdatePricing}
+                onDelete={handleDeleteProduct}
                 selectedTags={selectedTags}
                 onTagClick={handleTagClick}
                 onShowVariants={handleShowVariants}
@@ -484,31 +536,7 @@ export default function ProductsPage() {
           {/* Variant Panel - slides from the selected card */}
           {showingVariantsForProduct && selectedProduct && (
             <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[90vw] max-w-4xl animate-in slide-in-from-right duration-300">
-              <div className="bg-background border-2 border-primary rounded-lg shadow-2xl p-6 max-h-[80vh] overflow-y-auto relative">
-                {/* Navigation Arrows */}
-                {currentVariantProductIndex > 0 && (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={handlePreviousProduct}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full shadow-lg hover:scale-110 transition-transform"
-                    title="Previous product with variants (←)"
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </Button>
-                )}
-                {currentVariantProductIndex < productsWithVariants.length - 1 && (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={handleNextProduct}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full shadow-lg hover:scale-110 transition-transform"
-                    title="Next product with variants (→)"
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </Button>
-                )}
-
+              <div className="bg-background border-2 border-primary rounded-lg shadow-2xl p-6 max-h-[80vh] overflow-y-auto">
                 <div className="flex items-start justify-between mb-6">
                   <div>
                     <h2 className="text-2xl font-bold mb-1">{selectedProduct.title}</h2>
@@ -569,18 +597,6 @@ export default function ProductsPage() {
                     </div>
                   ))}
                 </div>
-
-                {/* Navigation Indicator */}
-                {productsWithVariants.length > 1 && (
-                  <div className="mt-4 pt-4 border-t flex items-center justify-center gap-3">
-                    <Badge variant="secondary" className="text-xs font-normal">
-                      Product {currentVariantProductIndex + 1} of {productsWithVariants.length} with variants
-                    </Badge>
-                    <div className="text-xs text-muted-foreground">
-                      Use ← → arrows to navigate
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -592,6 +608,8 @@ export default function ProductsPage() {
           onSelect={handleSelect}
           onSelectAll={handleSelectAll}
           onEdit={(product) => console.log('Edit product:', product)}
+          onUpdatePricing={handleUpdatePricing}
+          onDelete={handleDeleteProduct}
         />
       )}
 
@@ -602,3 +620,4 @@ export default function ProductsPage() {
     </div>
   );
 }
+

@@ -1,8 +1,43 @@
 // Hook for managing products
 'use client';
 
-import { useState, useEffect } from 'react';
-import type { ProductWithPricing, ProductFilter } from '../types';
+import { useState, useEffect, useCallback } from 'react';
+import type { ProductWithPricing, ProductFilter, ProductPricing } from '../types';
+import type { ShopifyProduct } from '@/features/shopify-integration/types';
+import { getShopifyClient } from '@/features/shopify-integration/services/shopifyClient';
+
+// Function to add pricing data to Shopify products
+function addPricingToProduct(shopifyProduct: ShopifyProduct): ProductWithPricing {
+  // Get the first variant's price as the current price
+  const firstVariant = shopifyProduct.variants[0];
+  const currentPrice = firstVariant ? parseFloat(firstVariant.price) : 0;
+  
+  // Calculate base price (current price for now, could be enhanced with pricing strategies)
+  const basePrice = currentPrice;
+  
+  // Calculate cost (assume 60% of base price for now, could be enhanced with actual cost data)
+  const cost = basePrice * 0.6;
+  
+  // Calculate max price (assume 150% of base price for now)
+  const maxPrice = basePrice * 1.5;
+  
+  // Calculate profit margin
+  const profitMargin = ((basePrice - cost) / basePrice) * 100;
+
+  const pricing: ProductPricing = {
+    basePrice,
+    cost,
+    maxPrice,
+    currentPrice,
+    profitMargin,
+    lastUpdated: new Date(),
+  };
+
+  return {
+    ...shopifyProduct,
+    pricing,
+  };
+}
 
 // Mock data for now - will be replaced with actual Shopify data
 const mockProducts: ProductWithPricing[] = [
@@ -129,63 +164,16 @@ const mockProducts: ProductWithPricing[] = [
       width: 800,
       height: 800,
     }],
-    variants: [
-      {
-        id: 'var2-28',
-        productId: '2',
-        title: '28 x 30',
-        sku: 'JEANS-28-30',
-        price: '89.99',
-        compareAtPrice: '99.99',
-        inventoryQuantity: 15,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var2-30',
-        productId: '2',
-        title: '30 x 30',
-        sku: 'JEANS-30-30',
-        price: '89.99',
-        compareAtPrice: '99.99',
-        inventoryQuantity: 22,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var2-32',
-        productId: '2',
-        title: '32 x 32',
-        sku: 'JEANS-32-32',
-        price: '89.99',
-        compareAtPrice: '99.99',
-        inventoryQuantity: 28,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var2-34',
-        productId: '2',
-        title: '34 x 32',
-        sku: 'JEANS-34-32',
-        price: '89.99',
-        compareAtPrice: '99.99',
-        inventoryQuantity: 18,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var2-36',
-        productId: '2',
-        title: '36 x 34',
-        sku: 'JEANS-36-34',
-        price: '89.99',
-        compareAtPrice: '99.99',
-        inventoryQuantity: 12,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ],
+    variants: [{
+      id: 'var2',
+      productId: '2',
+      title: 'Default',
+      sku: 'JEANS-001',
+      price: '89.99',
+      inventoryQuantity: 50,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     pricing: {
@@ -324,41 +312,16 @@ const mockProducts: ProductWithPricing[] = [
       width: 800,
       height: 800,
     }],
-    variants: [
-      {
-        id: 'var6-black',
-        productId: '6',
-        title: 'Black',
-        sku: 'BACKPACK-BLACK',
-        price: '59.99',
-        compareAtPrice: '69.99',
-        inventoryQuantity: 25,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var6-gray',
-        productId: '6',
-        title: 'Gray',
-        sku: 'BACKPACK-GRAY',
-        price: '59.99',
-        compareAtPrice: '69.99',
-        inventoryQuantity: 18,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var6-navy',
-        productId: '6',
-        title: 'Navy Blue',
-        sku: 'BACKPACK-NAVY',
-        price: '59.99',
-        compareAtPrice: '69.99',
-        inventoryQuantity: 22,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ],
+    variants: [{
+      id: 'var6',
+      productId: '6',
+      title: 'Default',
+      sku: 'BACKPACK-001',
+      price: '59.99',
+      inventoryQuantity: 60,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     pricing: {
@@ -423,85 +386,16 @@ const mockProducts: ProductWithPricing[] = [
       width: 800,
       height: 800,
     }],
-    variants: [
-      {
-        id: 'var8-7',
-        productId: '8',
-        title: 'Size 7 / Black',
-        sku: 'SHOES-7-BLACK',
-        price: '129.99',
-        compareAtPrice: '149.99',
-        inventoryQuantity: 12,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var8-8',
-        productId: '8',
-        title: 'Size 8 / Black',
-        sku: 'SHOES-8-BLACK',
-        price: '129.99',
-        compareAtPrice: '149.99',
-        inventoryQuantity: 18,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var8-9',
-        productId: '8',
-        title: 'Size 9 / Black',
-        sku: 'SHOES-9-BLACK',
-        price: '129.99',
-        compareAtPrice: '149.99',
-        inventoryQuantity: 25,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var8-10',
-        productId: '8',
-        title: 'Size 10 / Black',
-        sku: 'SHOES-10-BLACK',
-        price: '129.99',
-        compareAtPrice: '149.99',
-        inventoryQuantity: 22,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var8-7-white',
-        productId: '8',
-        title: 'Size 7 / White',
-        sku: 'SHOES-7-WHITE',
-        price: '134.99',
-        compareAtPrice: '149.99',
-        inventoryQuantity: 10,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var8-8-white',
-        productId: '8',
-        title: 'Size 8 / White',
-        sku: 'SHOES-8-WHITE',
-        price: '134.99',
-        compareAtPrice: '149.99',
-        inventoryQuantity: 15,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: 'var8-9-white',
-        productId: '8',
-        title: 'Size 9 / White',
-        sku: 'SHOES-9-WHITE',
-        price: '134.99',
-        compareAtPrice: '149.99',
-        inventoryQuantity: 20,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ],
+    variants: [{
+      id: 'var8',
+      productId: '8',
+      title: 'Default',
+      sku: 'SHOES-001',
+      price: '129.99',
+      inventoryQuantity: 40,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     pricing: {
@@ -888,12 +782,29 @@ const mockProducts: ProductWithPricing[] = [
 export function useProducts(filter?: ProductFilter) {
   const [products, setProducts] = useState<ProductWithPricing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Simulate API call
-    setLoading(true);
-    setTimeout(() => {
-      let filtered = [...mockProducts];
+  const fetchProducts = useCallback(async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        // Fetch via server-side proxy to avoid CORS and hide token
+        const res = await fetch('/api/shopify/products', { cache: 'no-store' });
+        const response: any = await res.json();
+
+        if (!response.success || !response.data) {
+          console.error('Shopify API Error:', response?.error || {});
+          throw new Error(response?.error?.message || 'Failed to fetch products');
+        }
+
+        // Extract products from proxied Shopify response (already transformed)
+        const shopifyProducts = (response.data || []) as ShopifyProduct[];
+
+        // Transform Shopify products to ProductWithPricing
+        const productsWithPricing = shopifyProducts.map(addPricingToProduct);
+        
+        let filtered = [...productsWithPricing];
 
       // Apply filters
       if (filter?.search) {
@@ -943,10 +854,77 @@ export function useProducts(filter?: ProductFilter) {
         });
       }
 
-      setProducts(filtered);
-      setLoading(false);
-    }, 500);
-  }, [filter]);
+        setProducts(filtered);
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching products:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch products');
+        setLoading(false);
+        
+        // Fallback to mock data if Shopify connection fails
+        console.log('Falling back to mock data');
+        let filtered = [...mockProducts];
+        
+        // Apply filters to mock data as well
+        if (filter?.search) {
+          const searchLower = filter.search.toLowerCase();
+          filtered = filtered.filter(p =>
+            p.title.toLowerCase().includes(searchLower) ||
+            p.description.toLowerCase().includes(searchLower)
+          );
+        }
 
-  return { products, loading };
+        if (filter?.tags && filter.tags.length > 0) {
+          filtered = filtered.filter(p =>
+            filter.tags!.some(tag => p.tags.includes(tag))
+          );
+        }
+
+        if (filter?.status) {
+          filtered = filtered.filter(p => p.status === filter.status);
+        }
+
+        // Apply sorting
+        if (filter?.sortBy) {
+          filtered.sort((a, b) => {
+            let aVal, bVal;
+            switch (filter.sortBy) {
+              case 'title':
+                aVal = a.title;
+                bVal = b.title;
+                break;
+              case 'price':
+                aVal = a.pricing.currentPrice;
+                bVal = b.pricing.currentPrice;
+                break;
+              case 'updated':
+                aVal = new Date(a.updatedAt).getTime();
+                bVal = new Date(b.updatedAt).getTime();
+                break;
+              default:
+                aVal = a.title;
+                bVal = b.title;
+            }
+
+            if (filter.sortDirection === 'desc') {
+              return aVal > bVal ? -1 : 1;
+            }
+            return aVal < bVal ? -1 : 1;
+          });
+        }
+
+        setProducts(filtered);
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter?.search, filter?.tags, filter?.status, filter?.sortBy, filter?.sortDirection]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const refetch = useCallback(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  return { products, loading, error, refetch };
 }

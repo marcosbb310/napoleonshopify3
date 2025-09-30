@@ -1,10 +1,13 @@
 // Product list component for list view
 'use client';
 
+import { useState } from 'react';
+import Image from 'next/image';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
-import { TrendingUp, TrendingDown, Edit } from 'lucide-react';
+import { Input } from '@/shared/components/ui/input';
+import { TrendingUp, TrendingDown, Edit, Check, X, Trash2 } from 'lucide-react';
 import type { ProductWithPricing } from '../types';
 
 interface ProductListProps {
@@ -13,6 +16,8 @@ interface ProductListProps {
   onSelect: (id: string) => void;
   onSelectAll: () => void;
   onEdit: (product: ProductWithPricing) => void;
+  onUpdatePricing?: (productId: string, pricing: { basePrice?: number; cost?: number; maxPrice?: number; currentPrice?: number }) => void;
+  onDelete?: (productId: string) => void;
 }
 
 export function ProductList({ 
@@ -20,9 +25,76 @@ export function ProductList({
   selectedIds, 
   onSelect, 
   onSelectAll,
-  onEdit 
+  onEdit,
+  onUpdatePricing,
+  onDelete
 }: ProductListProps) {
   const allSelected = products.length > 0 && products.every(p => selectedIds.has(p.id));
+  const [editingField, setEditingField] = useState<{ productId: string; field: 'currentPrice' | 'basePrice' | 'cost' | 'maxPrice' } | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const handleStartEdit = (productId: string, field: 'currentPrice' | 'basePrice' | 'cost' | 'maxPrice', currentValue: number) => {
+    setEditingField({ productId, field });
+    setEditValue(currentValue.toFixed(2));
+  };
+
+  const handleSaveEdit = () => {
+    if (editingField && onUpdatePricing) {
+      const newValue = parseFloat(editValue);
+      if (!isNaN(newValue) && newValue > 0) {
+        onUpdatePricing(editingField.productId, { [editingField.field]: newValue });
+      }
+    }
+    setEditingField(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingField(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  };
+
+  const renderEditablePrice = (product: ProductWithPricing, field: 'currentPrice' | 'basePrice' | 'cost' | 'maxPrice', value: number, className: string = '') => {
+    const isEditing = editingField?.productId === product.id && editingField?.field === field;
+    
+    if (isEditing) {
+      return (
+        <div className="flex items-center gap-1">
+          <Input
+            type="number"
+            step="0.01"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="h-8 w-20 text-sm"
+            autoFocus
+          />
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleSaveEdit}>
+            <Check className="h-3.5 w-3.5 text-green-600" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleCancelEdit}>
+            <X className="h-3.5 w-3.5 text-destructive" />
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <button
+        onClick={() => handleStartEdit(product.id, field, value)}
+        className={`hover:bg-primary hover:text-white transition-all duration-200 cursor-pointer px-2 py-1 rounded-md ${className}`}
+      >
+        ${value.toFixed(2)}
+      </button>
+    );
+  };
 
   return (
     <div className="rounded-lg border">
@@ -65,7 +137,21 @@ export function ProductList({
                   </td>
                   <td className="p-3">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded bg-muted flex-shrink-0" />
+                      <div className="h-10 w-10 rounded bg-muted flex-shrink-0 overflow-hidden">
+                        {product.images[0] ? (
+                          <Image
+                            src={product.images[0].src}
+                            alt={product.title}
+                            width={40}
+                            height={40}
+                            className="object-cover w-full h-full"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center">
+                            <span className="text-muted-foreground text-xs">No image</span>
+                          </div>
+                        )}
+                      </div>
                       <div className="min-w-0">
                         <div className="font-medium truncate">{product.title}</div>
                         <div className="text-xs text-muted-foreground truncate">
@@ -74,17 +160,17 @@ export function ProductList({
                       </div>
                     </div>
                   </td>
-                  <td className="p-3 font-semibold">
-                    ${product.pricing.currentPrice.toFixed(2)}
+                  <td className="p-3">
+                    {renderEditablePrice(product, 'currentPrice', product.pricing.currentPrice, 'font-semibold')}
                   </td>
-                  <td className="p-3 text-muted-foreground">
-                    ${product.pricing.basePrice.toFixed(2)}
+                  <td className="p-3">
+                    {renderEditablePrice(product, 'basePrice', product.pricing.basePrice, 'text-muted-foreground')}
                   </td>
-                  <td className="p-3 text-muted-foreground">
-                    ${product.pricing.cost.toFixed(2)}
+                  <td className="p-3">
+                    {renderEditablePrice(product, 'cost', product.pricing.cost, 'text-muted-foreground')}
                   </td>
-                  <td className="p-3 text-muted-foreground">
-                    ${product.pricing.maxPrice.toFixed(2)}
+                  <td className="p-3">
+                    {renderEditablePrice(product, 'maxPrice', product.pricing.maxPrice, 'text-muted-foreground')}
                   </td>
                   <td className="p-3">
                     <span className="font-medium">
@@ -118,13 +204,25 @@ export function ProductList({
                     </div>
                   </td>
                   <td className="p-3 text-right">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onEdit(product)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onEdit(product)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      {onDelete && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => onDelete(product.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Input } from '@/shared/components/ui/input';
-import { TrendingUp, TrendingDown, Check, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, Check, X, Trash2 } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import {
   Sheet,
@@ -24,15 +24,16 @@ interface ProductCardProps {
   isSelected: boolean;
   onSelect: (id: string) => void;
   onEdit: (product: ProductWithPricing) => void;
-  onUpdatePricing?: (productId: string, pricing: { basePrice?: number; cost?: number; maxPrice?: number }) => void;
+  onUpdatePricing?: (productId: string, pricing: { basePrice?: number; cost?: number; maxPrice?: number; currentPrice?: number }) => void;
+  onDelete?: (productId: string) => void;
   selectedTags?: Set<string>;
   onTagClick?: (tag: string) => void;
   onShowVariants?: (productId: string) => void;
   isShowingVariants?: boolean;
 }
 
-export function ProductCard({ product, isSelected, onSelect, onUpdatePricing, selectedTags, onTagClick, onShowVariants, isShowingVariants }: ProductCardProps) {
-  const [editingField, setEditingField] = useState<'basePrice' | 'cost' | 'maxPrice' | null>(null);
+export function ProductCard({ product, isSelected, onSelect, onUpdatePricing, onDelete, selectedTags, onTagClick, onShowVariants, isShowingVariants }: ProductCardProps) {
+  const [editingField, setEditingField] = useState<'basePrice' | 'cost' | 'maxPrice' | 'currentPrice' | null>(null);
   const [editValue, setEditValue] = useState('');
   
   const profitChange = product.pricing.currentPrice - product.pricing.basePrice;
@@ -42,7 +43,7 @@ export function ProductCard({ product, isSelected, onSelect, onUpdatePricing, se
     ? `$${Math.min(...product.variants.map(v => parseFloat(v.price))).toFixed(2)} - $${Math.max(...product.variants.map(v => parseFloat(v.price))).toFixed(2)}`
     : `$${product.variants[0]?.price || '0.00'}`;
 
-  const handleStartEdit = (field: 'basePrice' | 'cost' | 'maxPrice', currentValue: number, e: React.MouseEvent) => {
+  const handleStartEdit = (field: 'basePrice' | 'cost' | 'maxPrice' | 'currentPrice', currentValue: number, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingField(field);
     setEditValue(currentValue.toFixed(2));
@@ -92,6 +93,22 @@ export function ProductCard({ product, isSelected, onSelect, onUpdatePricing, se
         </div>
       </div>
 
+      {onDelete && (
+        <div className="absolute right-3 top-3 z-20">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 rounded-md bg-background/95 backdrop-blur-sm shadow-md border hover:border-destructive hover:bg-destructive/10 hover:text-destructive transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(product.id);
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       <div>
         <div className="relative aspect-[5/3] overflow-hidden bg-gradient-to-br from-muted to-muted/50 z-0">
           {product.images[0] ? (
@@ -138,9 +155,33 @@ export function ProductCard({ product, isSelected, onSelect, onUpdatePricing, se
             {/* Current Price & Performance */}
             <div className="flex items-baseline justify-between bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-2.5 border border-primary/20">
               <div>
-                <div className="text-2xl font-bold tracking-tight text-primary">
-                  ${product.pricing.currentPrice.toFixed(2)}
-                </div>
+                {editingField === 'currentPrice' ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-8 w-24 text-lg font-bold"
+                      autoFocus
+                    />
+                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleSaveEdit}>
+                      <Check className="h-3.5 w-3.5 text-green-600" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleCancelEdit}>
+                      <X className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => handleStartEdit('currentPrice', product.pricing.currentPrice, e)}
+                    className="text-2xl font-bold tracking-tight text-primary hover:text-white hover:bg-primary transition-all duration-200 cursor-pointer px-2 py-1 rounded-md"
+                  >
+                    ${product.pricing.currentPrice.toFixed(2)}
+                  </button>
+                )}
                 <div className="text-xs text-muted-foreground">
                   Current
                 </div>

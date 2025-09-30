@@ -9,9 +9,18 @@ export class ShopifyClient {
   private baseUrl: string;
   private accessToken: string;
 
-  constructor(credentials: ShopifyCredentials) {
-    this.baseUrl = `https://${credentials.storeUrl}/admin/api/2024-10`;
-    this.accessToken = credentials.accessToken;
+  constructor(credentials?: ShopifyCredentials) {
+    // Use provided credentials or fall back to environment variables
+    const storeUrl = credentials?.storeUrl || process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL;
+    const accessToken = credentials?.accessToken || process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
+    const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
+
+    if (!storeUrl || !accessToken) {
+      throw new Error('Shopify credentials not provided. Please set NEXT_PUBLIC_SHOPIFY_STORE_URL and NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN environment variables.');
+    }
+
+    this.baseUrl = `https://${storeUrl}/admin/api/${apiVersion}`;
+    this.accessToken = accessToken;
   }
 
   private async request<T>(
@@ -56,7 +65,60 @@ export class ShopifyClient {
   }
 
   async getProducts(): Promise<ShopifyApiResponse<ShopifyProduct[]>> {
-    return this.request<ShopifyProduct[]>('/products.json');
+    const response = await this.request<{ products: any[] }>('/products.json?limit=250');
+    
+    if (!response.success || !response.data) {
+      return response as ShopifyApiResponse<ShopifyProduct[]>;
+    }
+
+    // Transform Shopify API response to our format
+    const transformedProducts: ShopifyProduct[] = response.data.products.map((product: any) => ({
+      id: product.id.toString(),
+      title: product.title,
+      handle: product.handle,
+      description: product.body_html || '',
+      vendor: product.vendor || '',
+      productType: product.product_type || '',
+      tags: product.tags ? product.tags.split(',').map((tag: string) => tag.trim()) : [],
+      status: product.status as 'active' | 'draft' | 'archived',
+      images: product.images?.map((image: any) => ({
+        id: image.id.toString(),
+        productId: product.id.toString(),
+        src: image.src,
+        alt: image.alt || '',
+        width: image.width || 800,
+        height: image.height || 800,
+      })) || [],
+      variants: product.variants?.map((variant: any) => ({
+        id: variant.id.toString(),
+        productId: product.id.toString(),
+        title: variant.title,
+        sku: variant.sku || '',
+        price: variant.price,
+        compareAtPrice: variant.compare_at_price,
+        inventoryQuantity: variant.inventory_quantity || 0,
+        inventoryManagement: variant.inventory_management,
+        weight: variant.weight,
+        weightUnit: variant.weight_unit as 'g' | 'kg' | 'oz' | 'lb',
+        image: variant.image ? {
+          id: variant.image.id.toString(),
+          productId: product.id.toString(),
+          src: variant.image.src,
+          alt: variant.image.alt || '',
+          width: variant.image.width || 800,
+          height: variant.image.height || 800,
+        } : undefined,
+        createdAt: variant.created_at,
+        updatedAt: variant.updated_at,
+      })) || [],
+      createdAt: product.created_at,
+      updatedAt: product.updated_at,
+    }));
+
+    return {
+      success: true,
+      data: transformedProducts,
+    };
   }
 
   async getProduct(id: string): Promise<ShopifyApiResponse<ShopifyProduct>> {
@@ -105,17 +167,22 @@ export class ShopifyClient {
   }
 }
 
-// Singleton instance - will be initialized with user credentials
+// Singleton instance - will be initialized with user credentials or environment variables
 let shopifyClientInstance: ShopifyClient | null = null;
 
-export function initializeShopifyClient(credentials: ShopifyCredentials) {
+export function initializeShopifyClient(credentials?: ShopifyCredentials) {
   shopifyClientInstance = new ShopifyClient(credentials);
   return shopifyClientInstance;
 }
 
 export function getShopifyClient(): ShopifyClient {
   if (!shopifyClientInstance) {
-    throw new Error('Shopify client not initialized');
+    // Try to initialize with environment variables
+    try {
+      shopifyClientInstance = new ShopifyClient();
+    } catch (error) {
+      throw new Error('Shopify client not initialized and environment variables not set. Please initialize with credentials or set environment variables.');
+    }
   }
   return shopifyClientInstance;
 }
