@@ -40,7 +40,7 @@ interface BulkEditToolbarProps {
   onBulkUpdate?: (updates: {
     type: 'percentage' | 'fixed';
     value: number;
-    applyTo: 'basePrice' | 'maxPrice' | 'cost';
+    applyTo: 'basePrice' | 'maxPrice' | 'cost' | 'currentPrice';
     productIds: string[];
   }) => void;
   onBulkDelete?: (productIds: string[]) => void;
@@ -52,7 +52,7 @@ export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductC
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [editType, setEditType] = useState<'percentage' | 'fixed'>('percentage');
   const [value, setValue] = useState('');
-  const [applyTo, setApplyTo] = useState<'basePrice' | 'maxPrice' | 'cost'>('basePrice');
+  const [applyTo, setApplyTo] = useState<'basePrice' | 'maxPrice' | 'cost' | 'currentPrice'>('basePrice');
 
   const handleApply = () => {
     const numValue = parseFloat(value);
@@ -105,7 +105,7 @@ export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductC
     const numValue = parseFloat(value);
     if (isNaN(numValue)) return '';
 
-    const field = applyTo === 'basePrice' ? 'Base Price' : applyTo === 'maxPrice' ? 'Max Price' : 'Cost';
+    const field = applyTo === 'basePrice' ? 'Base Price' : applyTo === 'maxPrice' ? 'Max Price' : applyTo === 'currentPrice' ? 'Current Price' : 'Cost';
     const change = editType === 'percentage' 
       ? `${numValue > 0 ? 'increase' : 'decrease'} by ${Math.abs(numValue)}%`
       : `${numValue > 0 ? 'add' : 'subtract'} $${Math.abs(numValue)}`;
@@ -167,13 +167,14 @@ export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductC
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Apply To</Label>
-              <Select value={applyTo} onValueChange={(v) => setApplyTo(v as 'basePrice' | 'maxPrice' | 'cost')}>
+              <Select value={applyTo} onValueChange={(v) => setApplyTo(v as 'basePrice' | 'maxPrice' | 'cost' | 'currentPrice')}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="basePrice">Base Price</SelectItem>
                   <SelectItem value="maxPrice">Max Price</SelectItem>
+                  <SelectItem value="currentPrice">Current Price</SelectItem>
                   <SelectItem value="cost">Cost</SelectItem>
                 </SelectContent>
               </Select>
@@ -235,15 +236,15 @@ export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductC
               Confirm Bulk Price Change
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-3 pt-2">
-              <div className="text-base font-medium text-foreground">
+              <span className="block text-base font-medium text-foreground">
                 You are about to update <span className="text-primary font-bold">{totalProductCount} products</span>:
-              </div>
-              <div className="bg-muted p-3 rounded-md border-l-4 border-primary">
-                <div className="font-semibold text-sm">{getChangeDescription()}</div>
-              </div>
-              <div className="text-sm">
+              </span>
+              <span className="block bg-muted p-3 rounded-md border-l-4 border-primary">
+                <span className="block font-semibold text-sm">{getChangeDescription()}</span>
+              </span>
+              <span className="block text-sm">
                 This action will affect all products in your store. You can undo this change after applying it.
-              </div>
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -279,17 +280,17 @@ export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductC
               Confirm Product Deletion
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-3 pt-2">
-              <div className="text-base font-medium text-foreground">
+              <span className="block text-base font-medium text-foreground">
                 Are you sure you want to delete <span className="text-primary font-bold">{selectedIds.length} product{selectedIds.length > 1 ? 's' : ''}</span>?
-              </div>
-              <div className="bg-red-50 p-3 rounded-md border-l-4 border-red-500">
-                <div className="font-semibold text-sm text-red-800">
+              </span>
+              <span className="block bg-red-50 p-3 rounded-md border-l-4 border-red-500">
+                <span className="block font-semibold text-sm text-red-800">
                   This action cannot be undone. All product data, including pricing, images, and variants will be permanently deleted.
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground">
+                </span>
+              </span>
+              <span className="block text-sm text-muted-foreground">
                 Make sure you have backed up any important data before proceeding.
-              </div>
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -10,6 +10,8 @@ import {
   ProductFilters,
   SelectionBar,
   NewProductModal,
+  ProductCardSkeleton,
+  ProductListSkeleton,
 } from '@/features/product-management/components';
 import type { ViewMode } from '@/shared/types';
 import { Card } from '@/shared/components/ui/card';
@@ -209,7 +211,7 @@ export default function ProductsPage() {
   const handleBulkUpdate = (updates: {
     type: 'percentage' | 'fixed';
     value: number;
-    applyTo: 'basePrice' | 'maxPrice' | 'cost';
+    applyTo: 'basePrice' | 'maxPrice' | 'cost' | 'currentPrice';
     productIds: string[];
   }) => {
     console.log('handleBulkUpdate called in page:', updates);
@@ -477,11 +479,20 @@ export default function ProductsPage() {
       )}
 
       {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <div className="text-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
-            <p className="text-muted-foreground">Loading products from Shopify...</p>
-          </div>
+        <div className="space-y-4">
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <ProductCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <ProductListSkeleton key={i} />
+              ))}
+            </div>
+          )}
         </div>
       ) : error ? (
         <Card className="flex h-64 items-center justify-center">

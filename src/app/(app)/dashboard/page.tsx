@@ -3,19 +3,29 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { DollarSign, TrendingUp, Package, Activity } from 'lucide-react';
+import { DashboardSkeleton } from '@/shared/components';
+import { useAuth } from '@/features/auth';
 
 export default function DashboardPage() {
-  // Mock data - will be replaced with real data
+  const { isInitialized } = useAuth();
+  
+  // TODO: Replace with real data from Shopify API
+  const isLoading = false; // This would come from your data fetching hook
   const metrics = {
-    totalRevenue: 45231.89,
-    revenueChange: 20.1,
-    totalProfit: 12345.67,
-    profitChange: 15.3,
-    activeProducts: 145,
-    productsChange: 5,
-    priceChanges: 23,
-    changesChange: -10,
+    totalRevenue: 0,
+    revenueChange: 0,
+    totalProfit: 0,
+    profitChange: 0,
+    activeProducts: 0,
+    productsChange: 0,
+    priceChanges: 0,
+    changesChange: 0,
   };
+
+  // Show skeleton during data loading or auth rehydration
+  if (isLoading || !isInitialized) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <div className="space-y-6">

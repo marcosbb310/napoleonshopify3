@@ -4,8 +4,9 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/shared/components/ui/sidebar';
-import { AppSidebar } from '@/shared/components';
-import { useAuth } from '@/features/auth';
+import { AppSidebar, AuthSkeleton, AuthInitSkeleton } from '@/shared/components';
+import { useAuth, useAuthHydration } from '@/features/auth';
+import { usePathname } from 'next/navigation';
 import { Separator } from '@/shared/components/ui/separator';
 import { Toaster } from '@/shared/components/ui/sonner';
 
@@ -15,23 +16,47 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const pathname = usePathname();
+  const { isAuthenticated, isLoading, isInitialized } = useAuth();
+  
+  // Handle auth hydration to prevent hydration mismatch
+  useAuthHydration();
 
+  // Save the current page on refresh/load for potential redirect after login
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    const currentPath = window.location.pathname;
+    if (currentPath !== '/') {
+      sessionStorage.setItem('intended-page', currentPath);
+    }
+  }, []);
+
+  // Only redirect if auth is initialized and user is not authenticated
+  useEffect(() => {
+    if (isInitialized && !isLoading && !isAuthenticated) {
+      // Save the current page before redirecting so user can return to it after login
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/') {
+        sessionStorage.setItem('intended-page', currentPath);
+      }
       router.push('/');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, isInitialized, router]);
 
-  if (isLoading || !isAuthenticated) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+  // Show loading during actual authentication operations (login/register)
+  if (isLoading) {
+    return <AuthSkeleton />;
+  }
+
+  // Show minimal loading while auth state is being rehydrated
+  // Skip for dashboard since it handles its own loading state
+  if (!isInitialized && pathname !== '/dashboard') {
+    return <AuthInitSkeleton />;
+  }
+
+  // If user is not authenticated, don't render anything
+  // (redirect will happen in useEffect above)
+  if (!isAuthenticated) {
+    return null;
   }
 
   return (
