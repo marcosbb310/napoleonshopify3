@@ -66,28 +66,39 @@ export async function GET() {
         width: image.width || 800,
         height: image.height || 800,
       })) || [],
-      variants: product.variants?.map((variant: any) => ({
-        id: variant.id.toString(),
-        productId: product.id.toString(),
-        title: variant.title,
-        sku: variant.sku || '',
-        price: variant.price,
-        compareAtPrice: variant.compare_at_price,
-        inventoryQuantity: variant.inventory_quantity || 0,
-        inventoryManagement: variant.inventory_management,
-        weight: variant.weight,
-        weightUnit: variant.weight_unit as 'g' | 'kg' | 'oz' | 'lb',
-        image: variant.image ? {
-          id: variant.image.id.toString(),
+      variants: product.variants?.map((variant: any) => {
+        // Validate and sanitize price values
+        const price = parseFloat(variant.price) || 0;
+        const compareAtPrice = variant.compare_at_price ? parseFloat(variant.compare_at_price) : null;
+        
+        // Cap prices at reasonable maximum to prevent frontend issues
+        const maxPrice = 999999.99;
+        const sanitizedPrice = Math.min(price, maxPrice);
+        const sanitizedCompareAtPrice = compareAtPrice ? Math.min(compareAtPrice, maxPrice) : null;
+        
+        return {
+          id: variant.id.toString(),
           productId: product.id.toString(),
-          src: variant.image.src,
-          alt: variant.image.alt || '',
-          width: variant.image.width || 800,
-          height: variant.image.height || 800,
-        } : undefined,
-        createdAt: variant.created_at,
-        updatedAt: variant.updated_at,
-      })) || [],
+          title: variant.title,
+          sku: variant.sku || '',
+          price: sanitizedPrice.toString(),
+          compareAtPrice: sanitizedCompareAtPrice?.toString() || null,
+          inventoryQuantity: variant.inventory_quantity || 0,
+          inventoryManagement: variant.inventory_management,
+          weight: variant.weight,
+          weightUnit: variant.weight_unit as 'g' | 'kg' | 'oz' | 'lb',
+          image: variant.image ? {
+            id: variant.image.id.toString(),
+            productId: product.id.toString(),
+            src: variant.image.src,
+            alt: variant.image.alt || '',
+            width: variant.image.width || 800,
+            height: variant.image.height || 800,
+          } : undefined,
+          createdAt: variant.created_at,
+          updatedAt: variant.updated_at,
+        };
+      }) || [],
       createdAt: product.created_at,
       updatedAt: product.updated_at,
     })) || [];

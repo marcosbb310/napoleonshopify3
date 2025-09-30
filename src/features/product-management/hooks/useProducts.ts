@@ -10,7 +10,18 @@ import { getShopifyClient } from '@/features/shopify-integration/services/shopif
 function addPricingToProduct(shopifyProduct: ShopifyProduct): ProductWithPricing {
   // Get the first variant's price as the current price
   const firstVariant = shopifyProduct.variants[0];
-  const currentPrice = firstVariant ? parseFloat(firstVariant.price) : 0;
+  let currentPrice = 0;
+  
+  if (firstVariant) {
+    const rawPrice = parseFloat(firstVariant.price);
+    // Validate price is reasonable (not NaN, not negative, not too large)
+    if (!isNaN(rawPrice) && rawPrice >= 0 && rawPrice <= 999999.99) {
+      currentPrice = rawPrice;
+    } else {
+      console.warn(`Invalid price for product ${shopifyProduct.id}: ${firstVariant.price}`);
+      currentPrice = 0;
+    }
+  }
   
   // Calculate base price (current price for now, could be enhanced with pricing strategies)
   const basePrice = currentPrice;
@@ -21,8 +32,8 @@ function addPricingToProduct(shopifyProduct: ShopifyProduct): ProductWithPricing
   // Calculate max price (assume 150% of base price for now)
   const maxPrice = basePrice * 1.5;
   
-  // Calculate profit margin
-  const profitMargin = ((basePrice - cost) / basePrice) * 100;
+  // Calculate profit margin (avoid division by zero)
+  const profitMargin = basePrice > 0 ? ((basePrice - cost) / basePrice) * 100 : 0;
 
   const pricing: ProductPricing = {
     basePrice,
@@ -791,6 +802,11 @@ export function useProducts(filter?: ProductFilter) {
       try {
         // Fetch via server-side proxy to avoid CORS and hide token
         const res = await fetch('/api/shopify/products', { cache: 'no-store' });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
         const response: any = await res.json();
 
         if (!response.success || !response.data) {
@@ -801,8 +817,26 @@ export function useProducts(filter?: ProductFilter) {
         // Extract products from proxied Shopify response (already transformed)
         const shopifyProducts = (response.data || []) as ShopifyProduct[];
 
-        // Transform Shopify products to ProductWithPricing
-        const productsWithPricing = shopifyProducts.map(addPricingToProduct);
+        // Transform Shopify products to ProductWithPricing with error handling
+        const productsWithPricing = shopifyProducts.map((product) => {
+          try {
+            return addPricingToProduct(product);
+          } catch (error) {
+            console.error(`Error processing product ${product.id}:`, error);
+            // Return a fallback product with safe defaults
+            return {
+              ...product,
+              pricing: {
+                basePrice: 0,
+                cost: 0,
+                maxPrice: 0,
+                currentPrice: 0,
+                profitMargin: 0,
+                lastUpdated: new Date(),
+              },
+            };
+          }
+        });
         
         let filtered = [...productsWithPricing];
 
