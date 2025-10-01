@@ -12,7 +12,7 @@ import { useAuth } from '@/features/auth';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { useRouter } from 'next/navigation';
 import { DateRange } from 'react-day-picker';
-import { addDays } from 'date-fns';
+import { addDays, format } from 'date-fns';
 
 export default function DashboardPage() {
   const { isInitialized } = useAuth();
@@ -238,10 +238,28 @@ export default function DashboardPage() {
             {/* Product Performance Grid */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Product Performance Overview</CardTitle>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Smart pricing impact vs baseline for all products
-                </p>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="text-base">Product Performance Overview</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Smart pricing impact vs baseline for all products
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-medium text-muted-foreground mb-0.5">Date Range</div>
+                    <div className="text-sm font-semibold">
+                      {dateRange?.from && dateRange?.to ? (
+                        <>
+                          {format(dateRange.from, 'MMM d')} - {format(dateRange.to, 'MMM d, yyyy')}
+                        </>
+                      ) : dateRange?.from ? (
+                        format(dateRange.from, 'MMM d, yyyy')
+                      ) : (
+                        'No date selected'
+                      )}
+                    </div>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -275,12 +293,22 @@ export default function DashboardPage() {
                         </div>
                         <div className="p-3 flex-1 flex flex-col">
                           <p className="text-sm font-medium leading-tight mb-2 line-clamp-2">{product.name}</p>
-                          <div className="mt-auto space-y-1.5">
+                          <div className="mt-auto">
                             <div className="flex gap-1.5">
                               <div className="flex-1 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 rounded-lg p-2 border border-green-200 dark:border-green-800">
                                 <div className="text-xs text-muted-foreground mb-0.5">Smart Pricing</div>
-                                <div className="text-sm font-bold tracking-tight text-green-600">
-                                  ${product.withSmartPricing.toLocaleString()}
+                                <div className="flex items-center gap-1">
+                                  <div className="text-sm font-bold tracking-tight text-green-600">
+                                    ${product.withSmartPricing.toLocaleString()}
+                                  </div>
+                                  <div className={`flex items-center gap-0.5 text-xs font-semibold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                    {isPositive ? (
+                                      <TrendingUp className="h-3 w-3" />
+                                    ) : (
+                                      <TrendingDown className="h-3 w-3" />
+                                    )}
+                                    <span>{isPositive ? '+' : ''}{percentChange}%</span>
+                                  </div>
                                 </div>
                               </div>
                               <div className="flex-1 bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-900 dark:to-gray-900 rounded-lg p-2 border border-slate-200 dark:border-slate-700">
@@ -289,14 +317,6 @@ export default function DashboardPage() {
                                   ${product.withoutSmartPricing.toLocaleString()}
                                 </div>
                               </div>
-                            </div>
-                            <div className={`flex items-center justify-center gap-1 text-xs font-semibold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                              {isPositive ? (
-                                <TrendingUp className="h-3 w-3" />
-                              ) : (
-                                <TrendingDown className="h-3 w-3" />
-                              )}
-                              <span>{isPositive ? '+' : ''}{percentChange}%</span>
                             </div>
                           </div>
                         </div>
