@@ -2,3 +2,4 @@
 export * from './ThemeProvider';
 export * from './DashboardSkeleton';
 export * from './AuthSkeleton';
+export * from './DateRangePicker';

@@ -17,11 +17,14 @@ import {
 } from '@/features/product-management';
 import { useSmartPricing } from '@/features/pricing-engine';
 import type { ViewMode } from '@/shared/types';
+import { DateRangePicker } from '@/shared/components';
 import { Card } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { X, Check, Undo2, Zap, ZapOff } from 'lucide-react';
 import { toast } from 'sonner';
+import { DateRange } from 'react-day-picker';
+import { addDays } from 'date-fns';
 
 export default function ProductsPage() {
   const searchParams = useSearchParams();
@@ -37,6 +40,12 @@ export default function ProductsPage() {
   const [showingVariantsForProduct, setShowingVariantsForProduct] = useState<string | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const { isProductEnabled, setProductState, setMultipleProductStates } = useSmartPricing();
+  
+  // Date range state - defaults to last 30 days
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: addDays(new Date(), -29),
+    to: new Date(),
+  });
 
   // Get all products (no loading state for filtering/searching)
   const { products: allProducts, loading, error, refetch } = useProducts();
@@ -395,25 +404,31 @@ export default function ProductsPage() {
             }
           </p>
         </div>
-        <div className="flex gap-2">
-          {lastBulkAction && (
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={handleUndo}
-            >
-              <Undo2 className="h-4 w-4" />
-              Undo Last Change
-            </Button>
-          )}
-          <BulkEditToolbar 
-            selectedCount={selectedIds.size} 
-            selectedIds={Array.from(selectedIds)}
-            totalProductCount={allProducts.length}
-            open={bulkEditOpen}
-            onOpenChange={setBulkEditOpen}
-            onBulkUpdate={handleBulkUpdate}
+        <div className="flex flex-col gap-2 items-end">
+          <DateRangePicker
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
           />
+          <div className="flex gap-2">
+            {lastBulkAction && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={handleUndo}
+              >
+                <Undo2 className="h-4 w-4" />
+                Undo Last Change
+              </Button>
+            )}
+            <BulkEditToolbar 
+              selectedCount={selectedIds.size} 
+              selectedIds={Array.from(selectedIds)}
+              totalProductCount={allProducts.length}
+              open={bulkEditOpen}
+              onOpenChange={setBulkEditOpen}
+              onBulkUpdate={handleBulkUpdate}
+            />
+          </div>
         </div>
       </div>
 
