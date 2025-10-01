@@ -200,4 +200,88 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  try {
+    const storeUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL || process.env.SHOPIFY_STORE_URL;
+    const accessToken = process.env.SHOPIFY_ACCESS_TOKEN || process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
+    const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || process.env.SHOPIFY_API_VERSION || '2024-10';
+
+    if (!storeUrl || !accessToken) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            message: 'Missing Shopify credentials on server. Set SHOPIFY_ACCESS_TOKEN and NEXT_PUBLIC_SHOPIFY_STORE_URL.',
+            statusCode: 500,
+          },
+        },
+        { status: 500 },
+      );
+    }
+
+    const body = await request.json();
+    const { productIds } = body;
+
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: { message: 'Product IDs are required', statusCode: 400 } },
+        { status: 400 },
+      );
+    }
+
+    const baseUrl = `https://${storeUrl}/admin/api/${apiVersion}`;
+
+    // Delete each product
+    const deletePromises = productIds.map(async (productId: string) => {
+      const res = await fetch(`${baseUrl}/products/${productId}.json`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': accessToken,
+        },
+        cache: 'no-store',
+      });
+
+      if (!res.ok) {
+        let errorMessage: string = `Failed to delete product ${productId}`;
+        try {
+          const err = await res.json();
+          if (err && err.errors) {
+            errorMessage = typeof err.errors === 'string' ? err.errors : JSON.stringify(err.errors);
+          }
+        } catch {
+          // ignore JSON parse error
+        }
+        return { success: false, productId, error: errorMessage };
+      }
+
+      return { success: true, productId };
+    });
+
+    const results = await Promise.all(deletePromises);
+    const failedDeletes = results.filter(r => !r.success);
+
+    if (failedDeletes.length > 0) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: { 
+            message: `Failed to delete ${failedDeletes.length} product(s)`, 
+            statusCode: 500,
+            details: failedDeletes,
+          } 
+        },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({ success: true, data: { deletedCount: productIds.length } }, { status: 200 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown server error';
+    return NextResponse.json(
+      { success: false, error: { message, statusCode: 500 } },
+      { status: 500 },
+    );
+  }
+}
 

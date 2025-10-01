@@ -37,6 +37,8 @@ interface BulkEditToolbarProps {
   selectedCount: number;
   selectedIds?: string[];
   totalProductCount?: number;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onBulkUpdate?: (updates: {
     type: 'percentage' | 'fixed';
     value: number;
@@ -46,8 +48,16 @@ interface BulkEditToolbarProps {
   onBulkDelete?: (productIds: string[]) => void;
 }
 
-export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductCount = 0, onBulkUpdate, onBulkDelete }: BulkEditToolbarProps) {
-  const [showDialog, setShowDialog] = useState(false);
+export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductCount = 0, open: externalOpen, onOpenChange, onBulkUpdate, onBulkDelete }: BulkEditToolbarProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const showDialog = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setShowDialog = (value: boolean) => {
+    if (onOpenChange) {
+      onOpenChange(value);
+    } else {
+      setInternalOpen(value);
+    }
+  };
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [editType, setEditType] = useState<'percentage' | 'fixed'>('percentage');

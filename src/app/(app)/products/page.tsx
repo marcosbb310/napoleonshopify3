@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useProducts, type ProductFilter, type ProductWithPricing } from '@/features/product-management';
 import {
   ProductCard,
@@ -21,6 +22,8 @@ import { X, Check, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ProductsPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filter, setFilter] = useState<ProductFilter>({
     sortBy: 'title',
@@ -30,6 +33,7 @@ export default function ProductsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [showingVariantsForProduct, setShowingVariantsForProduct] = useState<string | null>(null);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
 
   // Get all products (no loading state for filtering/searching)
   const { products: allProducts, loading, error, refetch } = useProducts();
@@ -61,6 +65,14 @@ export default function ProductsPage() {
       };
     });
   };
+
+  // Check for bulkEdit URL parameter and open dialog if present
+  useEffect(() => {
+    const bulkEdit = searchParams.get('bulkEdit');
+    if (bulkEdit === 'true') {
+      setBulkEditOpen(true);
+    }
+  }, [searchParams]);
 
   // Filter and sort products locally for instant results
   useEffect(() => {
@@ -316,31 +328,65 @@ export default function ProductsPage() {
     setTimeout(() => refetch(), 5000);
   };
 
-  const handleDeleteProduct = (productId: string) => {
-    // TODO: Call Shopify API to delete product
-    console.log('Deleting product:', productId);
-    
-    // For now, just show a success message
-    toast.success('Product deleted successfully!');
-    
-    // In a real implementation, this would:
-    // 1. Call the Shopify API to delete the product
-    // 2. Refresh the products list
-    // 3. Remove the product from the UI
+  const handleDeleteProduct = async (productId: string) => {
+    try {
+      toast.loading('Deleting product...', { id: 'delete-product' });
+      
+      // Call API to delete product
+      const response = await fetch('/api/shopify/products', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ productIds: [productId] }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error?.message || 'Failed to delete product');
+      }
+
+      toast.success('Product deleted successfully!', { id: 'delete-product' });
+      
+      // Refresh the products list
+      refetch();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete product';
+      toast.error(message, { id: 'delete-product' });
+    }
   };
 
-  const handleBulkDelete = (productIds: string[]) => {
-    // TODO: Call Shopify API to bulk delete products
-    console.log('Bulk deleting products:', productIds);
-    
-    // For now, just show a success message
-    toast.success(`${productIds.length} products deleted successfully!`);
-    
-    // In a real implementation, this would:
-    // 1. Call the Shopify API to delete the products
-    // 2. Refresh the products list
-    // 3. Remove the products from the UI
-    // 4. Clear the selection
+  const handleBulkDelete = async (productIds: string[]) => {
+    try {
+      toast.loading(`Deleting ${productIds.length} product(s)...`, { id: 'bulk-delete' });
+      
+      // Call API to delete products
+      const response = await fetch('/api/shopify/products', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ productIds }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error?.message || 'Failed to delete products');
+      }
+
+      toast.success(`${productIds.length} product(s) deleted successfully!`, { id: 'bulk-delete' });
+      
+      // Clear selection
+      setSelectedIds(new Set());
+      
+      // Refresh the products list
+      refetch();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete products';
+      toast.error(message, { id: 'bulk-delete' });
+    }
   };
 
   const handleSelect = (id: string) => {
@@ -421,6 +467,8 @@ export default function ProductsPage() {
             selectedCount={selectedIds.size} 
             selectedIds={Array.from(selectedIds)}
             totalProductCount={allProducts.length}
+            open={bulkEditOpen}
+            onOpenChange={setBulkEditOpen}
             onBulkUpdate={handleBulkUpdate}
             onBulkDelete={handleBulkDelete}
           />

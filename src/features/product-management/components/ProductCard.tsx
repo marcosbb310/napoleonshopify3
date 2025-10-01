@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Input } from '@/shared/components/ui/input';
-import { TrendingUp, TrendingDown, Check, X, Trash2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Check, X, Trash2, ChartLine } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import {
   Sheet,
@@ -17,6 +17,14 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/shared/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
 import type { ProductWithPricing } from '../types';
 
 interface ProductCardProps {
@@ -35,6 +43,8 @@ interface ProductCardProps {
 export function ProductCard({ product, isSelected, onSelect, onUpdatePricing, onDelete, selectedTags, onTagClick, onShowVariants, isShowingVariants }: ProductCardProps) {
   const [editingField, setEditingField] = useState<'basePrice' | 'cost' | 'maxPrice' | 'currentPrice' | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [showPriceHistory, setShowPriceHistory] = useState(false);
+  const [historyTimeRange, setHistoryTimeRange] = useState<'1d' | '1w' | '1m' | 'all'>('1m');
   
   const profitChange = product.pricing.currentPrice - product.pricing.basePrice;
   const profitChangePercent = ((profitChange / product.pricing.basePrice) * 100).toFixed(1);
@@ -42,6 +52,59 @@ export function ProductCard({ product, isSelected, onSelect, onUpdatePricing, on
   const priceRange = product.variants.length > 1 
     ? `$${Math.min(...product.variants.map(v => parseFloat(v.price))).toFixed(2)} - $${Math.max(...product.variants.map(v => parseFloat(v.price))).toFixed(2)}`
     : `$${product.variants[0]?.price || '0.00'}`;
+
+  // Sample price history data (would come from API in production)
+  const generatePriceHistory = () => {
+    const history = [];
+    const currentPrice = product.pricing.currentPrice;
+    const now = new Date();
+    
+    // Generate daily data for last 30 days
+    for (let i = 30; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      
+      // Simulate price variations
+      const variation = (Math.random() - 0.5) * 0.1; // ±5% variation
+      const price = currentPrice * (1 + variation);
+      const sales = Math.floor(Math.random() * 50) + 10;
+      
+      history.push({
+        date: date.toISOString().split('T')[0],
+        price: parseFloat(price.toFixed(2)),
+        sales,
+        revenue: parseFloat((price * sales).toFixed(2)),
+      });
+    }
+    
+    return history;
+  };
+
+  const priceHistory = generatePriceHistory();
+
+  // Filter history based on time range
+  const getFilteredHistory = () => {
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch (historyTimeRange) {
+      case '1d':
+        startDate.setDate(now.getDate() - 1);
+        break;
+      case '1w':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '1m':
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case 'all':
+        return priceHistory;
+    }
+    
+    return priceHistory.filter(entry => new Date(entry.date) >= startDate);
+  };
+
+  const filteredHistory = getFilteredHistory();
 
   const handleStartEdit = (field: 'basePrice' | 'cost' | 'maxPrice' | 'currentPrice', currentValue: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -93,8 +156,20 @@ export function ProductCard({ product, isSelected, onSelect, onUpdatePricing, on
         </div>
       </div>
 
-      {onDelete && (
-        <div className="absolute right-3 top-3 z-20">
+      <div className="absolute right-3 top-3 z-20 flex gap-2">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8 rounded-md bg-background/95 backdrop-blur-sm shadow-md border hover:border-primary hover:bg-primary/10 hover:text-primary transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowPriceHistory(true);
+          }}
+          title="View Price History"
+        >
+          <ChartLine className="h-4 w-4" />
+        </Button>
+        {onDelete && (
           <Button
             size="icon"
             variant="ghost"
@@ -103,11 +178,12 @@ export function ProductCard({ product, isSelected, onSelect, onUpdatePricing, on
               e.stopPropagation();
               onDelete(product.id);
             }}
+            title="Delete Product"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       <div>
         <div className="relative aspect-[5/3] overflow-hidden bg-gradient-to-br from-muted to-muted/50 z-0">
@@ -328,6 +404,111 @@ export function ProductCard({ product, isSelected, onSelect, onUpdatePricing, on
           </div>
         </CardContent>
       </div>
+
+      {/* Price History Dialog */}
+      <Dialog open={showPriceHistory} onOpenChange={setShowPriceHistory}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ChartLine className="h-5 w-5" />
+              Price History - {product.title}
+            </DialogTitle>
+            <DialogDescription>
+              View historical pricing data and sales performance
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Time Range Selector */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {filteredHistory.length} entries
+            </div>
+            <Tabs value={historyTimeRange} onValueChange={(value) => setHistoryTimeRange(value as any)}>
+              <TabsList>
+                <TabsTrigger value="1d">1 Day</TabsTrigger>
+                <TabsTrigger value="1w">1 Week</TabsTrigger>
+                <TabsTrigger value="1m">1 Month</TabsTrigger>
+                <TabsTrigger value="all">All Time</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {/* Price History Table */}
+          <div className="border rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-muted">
+                  <tr className="text-sm">
+                    <th className="text-left py-3 px-4 font-medium">Date</th>
+                    <th className="text-right py-3 px-4 font-medium">Price</th>
+                    <th className="text-right py-3 px-4 font-medium">Change</th>
+                    <th className="text-right py-3 px-4 font-medium">Sales</th>
+                    <th className="text-right py-3 px-4 font-medium">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.map((entry, index) => {
+                    const prevEntry = index > 0 ? filteredHistory[index - 1] : null;
+                    const priceChange = prevEntry 
+                      ? ((entry.price - prevEntry.price) / prevEntry.price) * 100 
+                      : 0;
+                    
+                    return (
+                      <tr key={entry.date} className="border-t text-sm hover:bg-muted/50">
+                        <td className="py-3 px-4">
+                          {new Date(entry.date).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            year: historyTimeRange === 'all' ? 'numeric' : undefined
+                          })}
+                        </td>
+                        <td className="text-right py-3 px-4 font-medium">
+                          ${entry.price.toFixed(2)}
+                        </td>
+                        <td className="text-right py-3 px-4">
+                          {prevEntry && priceChange !== 0 ? (
+                            <span className={priceChange > 0 ? 'text-green-600' : 'text-red-600'}>
+                              {priceChange > 0 ? '+' : ''}{priceChange.toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="text-right py-3 px-4">{entry.sales}</td>
+                        <td className="text-right py-3 px-4 font-medium">
+                          ${entry.revenue.toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Summary Statistics */}
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <div className="bg-muted/50 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground mb-1">Average Price</p>
+              <p className="text-lg font-semibold">
+                ${(filteredHistory.reduce((sum, h) => sum + h.price, 0) / filteredHistory.length).toFixed(2)}
+              </p>
+            </div>
+            <div className="bg-muted/50 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground mb-1">Total Sales</p>
+              <p className="text-lg font-semibold">
+                {filteredHistory.reduce((sum, h) => sum + h.sales, 0)}
+              </p>
+            </div>
+            <div className="bg-muted/50 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
+              <p className="text-lg font-semibold">
+                ${filteredHistory.reduce((sum, h) => sum + h.revenue, 0).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

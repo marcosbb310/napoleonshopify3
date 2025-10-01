@@ -3,3 +3,4 @@ export * from './AppSidebar';
 export * from './ThemeProvider';
 export * from './DashboardSkeleton';
 export * from './AuthSkeleton';
+export * from './UserMenu';

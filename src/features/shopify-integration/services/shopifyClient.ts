@@ -165,6 +165,32 @@ export class ShopifyClient {
 
     return { success: true };
   }
+
+  async deleteProduct(productId: string): Promise<ShopifyApiResponse<void>> {
+    return this.request<void>(`/products/${productId}.json`, {
+      method: 'DELETE',
+    });
+  }
+
+  async bulkDeleteProducts(productIds: string[]): Promise<ShopifyApiResponse<void>> {
+    const results = await Promise.all(
+      productIds.map(id => this.deleteProduct(id))
+    );
+
+    const hasErrors = results.some(r => !r.success);
+    if (hasErrors) {
+      const failedCount = results.filter(r => !r.success).length;
+      return {
+        success: false,
+        error: {
+          message: `${failedCount} product(s) failed to delete`,
+          statusCode: 500,
+        },
+      };
+    }
+
+    return { success: true };
+  }
 }
 
 // Singleton instance - will be initialized with user credentials or environment variables

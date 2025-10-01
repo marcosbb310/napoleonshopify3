@@ -4,7 +4,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/shared/components/ui/sidebar';
-import { AppSidebar, AuthSkeleton, AuthInitSkeleton } from '@/shared/components';
+import { AppSidebar, AuthSkeleton, AuthInitSkeleton, UserMenu } from '@/shared/components';
 import { useAuth, useAuthHydration } from '@/features/auth';
 import { usePathname } from 'next/navigation';
 import { Separator } from '@/shared/components/ui/separator';
@@ -70,6 +70,7 @@ export default function AppLayout({
             <div className="flex items-center gap-2">
               {/* Page title will be rendered here by child pages */}
             </div>
+            <UserMenu />
           </div>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 pt-6">

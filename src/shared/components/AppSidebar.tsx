@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Package,
   BarChart3,
-  Settings,
   DollarSign,
 } from 'lucide-react';
 import {
@@ -40,16 +39,10 @@ const menuItems = [
     icon: BarChart3,
     href: '/analytics',
   },
-  {
-    title: 'Settings',
-    icon: Settings,
-    href: '/settings',
-  },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
 
   return (
     <Sidebar>
@@ -89,24 +82,8 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t p-4">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-sm">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="text-xs font-medium">{user?.name?.[0]}</span>
-            </div>
-            <div className="flex flex-col flex-1 min-w-0">
-              <span className="text-sm font-medium truncate">{user?.name}</span>
-              <span className="text-xs text-muted-foreground truncate">
-                {user?.email}
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            Sign Out
-          </button>
+        <div className="text-xs text-muted-foreground text-center">
+          Smart Pricing v1.0
         </div>
       </SidebarFooter>
     </Sidebar>
