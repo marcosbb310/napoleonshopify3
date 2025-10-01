@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, X } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 
@@ -33,6 +33,51 @@ export function DateRangePicker({
   className,
 }: DateRangePickerProps) {
   const [isOpen, setIsOpen] = React.useState(false);
+  const [clickCount, setClickCount] = React.useState(0);
+  
+  // Reset click count when popover opens if there's already a complete range
+  React.useEffect(() => {
+    if (isOpen && dateRange?.from && dateRange?.to) {
+      setClickCount(2);
+    } else if (isOpen && dateRange?.from && !dateRange?.to) {
+      setClickCount(1);
+    } else if (isOpen && !dateRange) {
+      setClickCount(0);
+    }
+  }, [isOpen, dateRange]);
+  
+  const handleDateSelect = (range: DateRange | undefined) => {
+    if (!range?.from) {
+      onDateRangeChange(undefined);
+      setClickCount(0);
+      return;
+    }
+
+    if (clickCount === 0) {
+      // First click - set start date only
+      onDateRangeChange({ from: range.from, to: undefined });
+      setClickCount(1);
+    } else if (clickCount === 1) {
+      // Second click - complete the range
+      // The calendar gives us the range with both from and to when we click the second date
+      if (range.to) {
+        // Ensure from is always before to
+        const from = range.from.getTime() <= range.to.getTime() ? range.from : range.to;
+        const to = range.from.getTime() <= range.to.getTime() ? range.to : range.from;
+        onDateRangeChange({ from, to });
+        setClickCount(2);
+      }
+    } else if (clickCount === 2) {
+      // Third click - start a completely new range
+      onDateRangeChange({ from: range.from, to: undefined });
+      setClickCount(1);
+    }
+  };
+
+  const handleClear = () => {
+    onDateRangeChange(undefined);
+    setClickCount(0);
+  };
 
   const presetRanges = {
     today: {
@@ -95,6 +140,7 @@ export function DateRangePicker({
 
   const handlePresetSelect = (preset: keyof typeof presetRanges) => {
     onDateRangeChange(presetRanges[preset].range);
+    setClickCount(2); // Mark as complete range
     setIsOpen(false);
   };
 
@@ -106,7 +152,7 @@ export function DateRangePicker({
             id="date"
             variant="outline"
             className={cn(
-              'justify-start text-left font-normal',
+              'justify-start text-left font-normal w-[280px]',
               !dateRange && 'text-muted-foreground'
             )}
           >
@@ -126,29 +172,64 @@ export function DateRangePicker({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
-          <div className="flex">
-            <div className="border-r p-3 space-y-1">
-              <div className="text-sm font-medium mb-2">Presets</div>
-              {Object.entries(presetRanges).map(([key, { label }]) => (
+          <div className="flex flex-col">
+            <div className="flex border-b px-3 py-2 items-center justify-between">
+              <div className="text-sm font-medium">
+                {clickCount === 0 && 'Click first date to start'}
+                {clickCount === 1 && 'Click second date to complete range'}
+                {clickCount === 2 && 'Range selected (click again to start new)'}
+              </div>
+              <div className="flex gap-1">
+                {dateRange && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7"
+                    onClick={handleClear}
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Clear
+                  </Button>
+                )}
                 <Button
-                  key={key}
-                  variant="ghost"
+                  variant="default"
                   size="sm"
-                  className="w-full justify-start font-normal"
-                  onClick={() => handlePresetSelect(key as keyof typeof presetRanges)}
+                  className="h-7"
+                  onClick={() => setIsOpen(false)}
+                  disabled={clickCount !== 2}
                 >
-                  {label}
+                  Apply
                 </Button>
-              ))}
+              </div>
             </div>
-            <Calendar
-              initialFocus
-              mode="range"
-              defaultMonth={dateRange?.from}
-              selected={dateRange}
-              onSelect={onDateRangeChange}
-              numberOfMonths={2}
-            />
+            <div className="flex">
+              <div className="border-r p-3 space-y-1">
+                <div className="text-sm font-medium mb-2">Quick Select</div>
+                {Object.entries(presetRanges).map(([key, { label }]) => (
+                  <Button
+                    key={key}
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start font-normal text-xs"
+                    onClick={() => handlePresetSelect(key as keyof typeof presetRanges)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+              <div className="p-3">
+                <div className="[&_.rdp-day.rdp-today:not(.rdp-day_selected):not(.rdp-day_range_start):not(.rdp-day_range_end):not(.rdp-day_range_middle)]:!bg-transparent [&_.rdp-day.rdp-today:not(.rdp-day_selected):not(.rdp-day_range_start):not(.rdp-day_range_end):not(.rdp-day_range_middle)]:!text-foreground">
+                  <Calendar
+                    mode="range"
+                    defaultMonth={dateRange?.from || new Date()}
+                    selected={dateRange}
+                    onSelect={handleDateSelect}
+                    numberOfMonths={2}
+                    disabled={(date) => date > new Date()}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </PopoverContent>
       </Popover>
