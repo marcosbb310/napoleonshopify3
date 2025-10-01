@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
-import { DollarSign, AlertTriangle, Trash2 } from 'lucide-react';
+import { DollarSign, AlertTriangle } from 'lucide-react';
 
 interface BulkEditToolbarProps {
   selectedCount: number;
@@ -45,10 +45,9 @@ interface BulkEditToolbarProps {
     applyTo: 'basePrice' | 'maxPrice' | 'cost' | 'currentPrice';
     productIds: string[];
   }) => void;
-  onBulkDelete?: (productIds: string[]) => void;
 }
 
-export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductCount = 0, open: externalOpen, onOpenChange, onBulkUpdate, onBulkDelete }: BulkEditToolbarProps) {
+export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductCount = 0, open: externalOpen, onOpenChange, onBulkUpdate }: BulkEditToolbarProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const showDialog = externalOpen !== undefined ? externalOpen : internalOpen;
   const setShowDialog = (value: boolean) => {
@@ -59,7 +58,6 @@ export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductC
     }
   };
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [editType, setEditType] = useState<'percentage' | 'fixed'>('percentage');
   const [value, setValue] = useState('');
   const [applyTo, setApplyTo] = useState<'basePrice' | 'maxPrice' | 'cost' | 'currentPrice'>('basePrice');
@@ -123,26 +121,6 @@ export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductC
     return `${field}: ${change}`;
   };
 
-  const handleBulkDelete = () => {
-    if (!onBulkDelete) {
-      console.error('No onBulkDelete callback provided');
-      return;
-    }
-
-    if (selectedIds.length === 0) {
-      console.error('No products selected for deletion');
-      return;
-    }
-
-    setShowDeleteConfirmation(true);
-  };
-
-  const handleConfirmDelete = () => {
-    if (onBulkDelete && selectedIds.length > 0) {
-      onBulkDelete(selectedIds);
-      setShowDeleteConfirmation(false);
-    }
-  };
 
   return (
     <>
@@ -261,52 +239,6 @@ export function BulkEditToolbar({ selectedCount, selectedIds = [], totalProductC
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirm} className="bg-primary">
               Confirm & Apply Changes
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Bulk Delete Button */}
-      {selectedCount > 0 && onBulkDelete && (
-        <Button 
-          variant="destructive" 
-          className="gap-2"
-          onClick={handleBulkDelete}
-        >
-          <Trash2 className="h-4 w-4" />
-          Delete Selected
-          <span className="ml-1 rounded-full bg-background/20 px-2 py-0.5 text-xs">
-            {selectedCount}
-          </span>
-        </Button>
-      )}
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteConfirmation} onOpenChange={setShowDeleteConfirmation}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-              Confirm Product Deletion
-            </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3 pt-2">
-              <span className="block text-base font-medium text-foreground">
-                Are you sure you want to delete <span className="text-primary font-bold">{selectedIds.length} product{selectedIds.length > 1 ? 's' : ''}</span>?
-              </span>
-              <span className="block bg-red-50 p-3 rounded-md border-l-4 border-red-500">
-                <span className="block font-semibold text-sm text-red-800">
-                  This action cannot be undone. All product data, including pricing, images, and variants will be permanently deleted.
-                </span>
-              </span>
-              <span className="block text-sm text-muted-foreground">
-                Make sure you have backed up any important data before proceeding.
-              </span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete} className="bg-red-600 hover:bg-red-700">
-              Delete Products
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

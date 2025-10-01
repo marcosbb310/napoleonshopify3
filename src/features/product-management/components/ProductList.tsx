@@ -7,7 +7,7 @@ import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
-import { TrendingUp, TrendingDown, Edit, Check, X, Trash2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Edit, Check, X, Activity, CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { ProductWithPricing } from '../types';
 
 interface ProductListProps {
@@ -18,6 +18,8 @@ interface ProductListProps {
   onEdit: (product: ProductWithPricing) => void;
   onUpdatePricing?: (productId: string, pricing: { basePrice?: number; cost?: number; maxPrice?: number; currentPrice?: number }) => void;
   onDelete?: (productId: string) => void;
+  isProductEnabled?: (productId: string) => boolean;
+  onSmartPricingToggle?: (productId: string, enabled: boolean) => void;
 }
 
 export function ProductList({ 
@@ -27,7 +29,9 @@ export function ProductList({
   onSelectAll,
   onEdit,
   onUpdatePricing,
-  onDelete
+  onDelete,
+  isProductEnabled,
+  onSmartPricingToggle
 }: ProductListProps) {
   const allSelected = products.length > 0 && products.every(p => selectedIds.has(p.id));
   const [editingField, setEditingField] = useState<{ productId: string; field: 'currentPrice' | 'basePrice' | 'cost' | 'maxPrice' } | null>(null);
@@ -123,6 +127,22 @@ export function ProductList({
             {products.map((product) => {
               const profitChange = product.pricing.currentPrice - product.pricing.basePrice;
               const profitChangePercent = ((profitChange / product.pricing.basePrice) * 100).toFixed(1);
+              
+              // Algorithm status logic (TODO: Replace with real API data)
+              const getAlgorithmStatus = () => {
+                const margin = product.pricing.profitMargin;
+                const priceChange = parseFloat(profitChangePercent);
+                
+                if (margin < 15 || priceChange < -10) {
+                  return { icon: AlertTriangle, label: 'Review', color: 'text-yellow-600' };
+                } else if (margin > 30 && priceChange > 10) {
+                  return { icon: CheckCircle2, label: 'Optimizing', color: 'text-green-600' };
+                } else {
+                  return { icon: Activity, label: 'Active', color: 'text-blue-600' };
+                }
+              };
+              
+              const algorithmStatus = getAlgorithmStatus();
 
               return (
                 <tr
@@ -152,10 +172,16 @@ export function ProductList({
                           </div>
                         )}
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="font-medium truncate">{product.title}</div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {product.vendor}
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground truncate">
+                            {product.vendor}
+                          </span>
+                          <Badge variant="outline" className={`text-xs ${algorithmStatus.color}`}>
+                            <algorithmStatus.icon className="h-3 w-3 mr-1" />
+                            {algorithmStatus.label}
+                          </Badge>
                         </div>
                       </div>
                     </div>
@@ -209,19 +235,10 @@ export function ProductList({
                         size="sm"
                         variant="ghost"
                         onClick={() => onEdit(product)}
+                        title="View Details"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      {onDelete && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => onDelete(product.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
                     </div>
                   </td>
                 </tr>

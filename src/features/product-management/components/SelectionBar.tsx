@@ -7,6 +7,8 @@ import { X } from 'lucide-react';
 interface SelectionBarProps {
   selectedCount: number;
   onClearSelection: () => void;
+  onEnableSmartPricing?: () => void;
+  onDisableSmartPricing?: () => void;
 }
 
 export function SelectionBar({ selectedCount, onClearSelection }: SelectionBarProps) {

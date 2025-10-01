@@ -12,15 +12,15 @@ import {
   BulkEditToolbar,
   ProductFilters,
   SelectionBar,
-  NewProductModal,
   ProductCardSkeleton,
   ProductListSkeleton,
 } from '@/features/product-management';
+import { useSmartPricing } from '@/features/pricing-engine';
 import type { ViewMode } from '@/shared/types';
 import { Card } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
-import { X, Check, Undo2 } from 'lucide-react';
+import { X, Check, Undo2, Zap, ZapOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ProductsPage() {
@@ -36,6 +36,7 @@ export default function ProductsPage() {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [showingVariantsForProduct, setShowingVariantsForProduct] = useState<string | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const { isProductEnabled, setProductState, setMultipleProductStates } = useSmartPricing();
 
   // Get all products (no loading state for filtering/searching)
   const { products: allProducts, loading, error, refetch } = useProducts();
@@ -310,86 +311,6 @@ export default function ProductsPage() {
     setLastBulkAction(null);
   };
 
-  const handleNewProduct = (productData: {
-    title: string;
-    description: string;
-    vendor: string;
-    productType: string;
-    tags: string[];
-    basePrice: number;
-    cost: number;
-    maxPrice: number;
-    currentPrice: number;
-  }) => {
-    // Product was created successfully via API, refresh the products list
-    console.log('New product created:', productData);
-    
-    // Immediate refetch and short retries to get fresh data from Shopify
-    refetch();
-    setTimeout(() => refetch(), 2000);
-    setTimeout(() => refetch(), 5000);
-  };
-
-  const handleDeleteProduct = async (productId: string) => {
-    try {
-      toast.loading('Deleting product...', { id: 'delete-product' });
-      
-      // Call API to delete product
-      const response = await fetch('/api/shopify/products', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ productIds: [productId] }),
-      });
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error?.message || 'Failed to delete product');
-      }
-
-      toast.success('Product deleted successfully!', { id: 'delete-product' });
-      
-      // Refresh the products list
-      refetch();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete product';
-      toast.error(message, { id: 'delete-product' });
-    }
-  };
-
-  const handleBulkDelete = async (productIds: string[]) => {
-    try {
-      toast.loading(`Deleting ${productIds.length} product(s)...`, { id: 'bulk-delete' });
-      
-      // Call API to delete products
-      const response = await fetch('/api/shopify/products', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ productIds }),
-      });
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error?.message || 'Failed to delete products');
-      }
-
-      toast.success(`${productIds.length} product(s) deleted successfully!`, { id: 'bulk-delete' });
-      
-      // Clear selection
-      setSelectedIds(new Set());
-      
-      // Refresh the products list
-      refetch();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete products';
-      toast.error(message, { id: 'bulk-delete' });
-    }
-  };
 
   const handleSelect = (id: string) => {
     const newSelected = new Set(selectedIds);
@@ -411,6 +332,27 @@ export default function ProductsPage() {
 
   const handleClearSelection = () => {
     setSelectedIds(new Set());
+  };
+
+  const handleToggleSmartPricing = (enable: boolean) => {
+    // Update state for all selected products
+    setMultipleProductStates(Array.from(selectedIds), enable);
+
+    // TODO: Call API to enable/disable smart pricing for selected products
+    console.log(`${enable ? 'Enabling' : 'Disabling'} smart pricing for products:`, Array.from(selectedIds));
+    
+    toast.success(`Smart pricing ${enable ? 'enabled' : 'disabled'} for ${selectedIds.size} product${selectedIds.size > 1 ? 's' : ''}`, {
+      description: enable 
+        ? 'Algorithm will start optimizing prices for selected products'
+        : 'Prices will remain at current values until re-enabled',
+    });
+  };
+
+  const handleProductSmartPricingToggle = (productId: string, enabled: boolean) => {
+    setProductState(productId, enabled);
+
+    // TODO: Call API to toggle smart pricing for single product
+    console.log(`${enabled ? 'Enabling' : 'Disabling'} smart pricing for product:`, productId);
   };
 
   const handleTagClick = (tag: string) => {
@@ -454,7 +396,6 @@ export default function ProductsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <NewProductModal onProductCreated={handleNewProduct} />
           {lastBulkAction && (
             <Button
               variant="outline"
@@ -472,7 +413,6 @@ export default function ProductsPage() {
             open={bulkEditOpen}
             onOpenChange={setBulkEditOpen}
             onBulkUpdate={handleBulkUpdate}
-            onBulkDelete={handleBulkDelete}
           />
         </div>
       </div>
@@ -516,14 +456,42 @@ export default function ProductsPage() {
             )}
           </div>
           {selectedIds.size > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearSelection}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              Clear Selection
-            </Button>
+            <div className="flex items-center gap-2">
+              {(() => {
+                // Check if any selected products have smart pricing enabled
+                const selectedProducts = Array.from(selectedIds);
+                const allEnabled = selectedProducts.every(id => isProductEnabled(id));
+                
+                return (
+                  <Button
+                    variant={allEnabled ? "outline" : "default"}
+                    size="sm"
+                    onClick={() => handleToggleSmartPricing(!allEnabled)}
+                    className="gap-2"
+                  >
+                    {allEnabled ? (
+                      <>
+                        <ZapOff className="h-4 w-4" />
+                        Turn Off Smart Pricing
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-4 w-4" />
+                        Turn On Smart Pricing
+                      </>
+                    )}
+                  </Button>
+                );
+              })()}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSelection}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Clear Selection
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -574,7 +542,7 @@ export default function ProductsPage() {
           )}
           
           {/* Products Grid */}
-          <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 transition-all duration-300 ${
+          <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 auto-rows-fr transition-all duration-300 ${
             showingVariantsForProduct ? 'opacity-40 pointer-events-none' : ''
           }`}>
             {products.map((product) => (
@@ -585,11 +553,12 @@ export default function ProductsPage() {
                 onSelect={handleSelect}
                 onEdit={() => console.log('Edit product:', product)}
                 onUpdatePricing={handleUpdatePricing}
-                onDelete={handleDeleteProduct}
                 selectedTags={selectedTags}
                 onTagClick={handleTagClick}
                 onShowVariants={handleShowVariants}
                 isShowingVariants={product.id === showingVariantsForProduct}
+                smartPricingEnabled={isProductEnabled(product.id)}
+                onSmartPricingToggle={(enabled) => handleProductSmartPricingToggle(product.id, enabled)}
               />
             ))}
           </div>
@@ -670,7 +639,8 @@ export default function ProductsPage() {
           onSelectAll={handleSelectAll}
           onEdit={(product) => console.log('Edit product:', product)}
           onUpdatePricing={handleUpdatePricing}
-          onDelete={handleDeleteProduct}
+          isProductEnabled={isProductEnabled}
+          onSmartPricingToggle={handleProductSmartPricingToggle}
         />
       )}
 

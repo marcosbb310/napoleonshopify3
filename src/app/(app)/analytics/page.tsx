@@ -7,7 +7,6 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Progress } from '@/shared/components/ui/progress';
 import { Input } from '@/shared/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -22,7 +21,11 @@ import {
   Edit3,
   Check,
   X,
-  Search
+  Search,
+  Activity,
+  CheckCircle2,
+  ArrowUpRight,
+  ArrowDownRight
 } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -45,14 +48,16 @@ export default function AnalyticsPage() {
   // State for active tab
   const [activeTab, setActiveTab] = useState<string>('products');
 
-  // Sample data for comprehensive analytics
+  // Sample data for comprehensive analytics with previous period data
   const individualProducts = [
     {
       id: 'PROD-001',
       name: 'Classic Cotton T-Shirt',
       image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=150&h=150&fit=crop&crop=center',
       currentPrice: 29.99,
-      avgPrice: 26.50,
+      basePrice: 24.99,
+      avgPrice: 27.50,
+      startingPrice: 24.99,
       totalSales: 1250,
       totalRevenue: 37487.50,
       totalProfit: 11246.25,
@@ -63,6 +68,33 @@ export default function AnalyticsPage() {
       tags: ['apparel', 'cotton', 'casual', 'bestseller'],
       vendor: 'Fashion Co',
       productType: 'T-Shirt',
+      // Current Period (Last 30d)
+      currentPeriod: {
+        revenue: 3724,
+        units: 127,
+        avgPrice: 29.29,
+        profitPerUnit: 9.81,
+        profit: 1247,
+        margin: 33.5
+      },
+      // Previous Period (Previous 30d)
+      previousPeriod: {
+        revenue: 3151,
+        units: 134,
+        avgPrice: 23.52,
+        profitPerUnit: 7.61,
+        profit: 1020,
+        margin: 30.3
+      },
+      // vs Baseline (if price stayed at starting price)
+      baseline: {
+        revenue: 2987,
+        profit: 1004
+      },
+      // Algorithm info
+      algorithmStatus: 'success',
+      algorithmStrategy: 'Exploiting low price elasticity (-0.28)',
+      priceElasticity: -0.28,
       priceHistory: [
         { date: '2024-01-01', price: 24.99, sales: 145, revenue: 3623.55 },
         { date: '2024-02-01', price: 26.99, sales: 168, revenue: 4534.32 },
@@ -78,7 +110,9 @@ export default function AnalyticsPage() {
       name: 'Premium Denim Jeans',
       image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=150&h=150&fit=crop&crop=center',
       currentPrice: 89.99,
+      basePrice: 79.99,
       avgPrice: 85.00,
+      startingPrice: 79.99,
       totalSales: 890,
       totalRevenue: 80091.10,
       totalProfit: 32036.44,
@@ -89,6 +123,29 @@ export default function AnalyticsPage() {
       tags: ['apparel', 'denim', 'premium', 'jeans'],
       vendor: 'Fashion Co',
       productType: 'Jeans',
+      currentPeriod: {
+        revenue: 13228,
+        units: 147,
+        avgPrice: 89.99,
+        profitPerUnit: 36.05,
+        profit: 5299,
+        margin: 40.1
+      },
+      previousPeriod: {
+        revenue: 11234,
+        units: 158,
+        avgPrice: 71.09,
+        profitPerUnit: 28.04,
+        profit: 4430,
+        margin: 36.9
+      },
+      baseline: {
+        revenue: 11758,
+        profit: 4706
+      },
+      algorithmStatus: 'success',
+      algorithmStrategy: 'Optimal price found - holding steady',
+      priceElasticity: -0.42,
       priceHistory: [
         { date: '2024-01-01', price: 79.99, sales: 98, revenue: 7839.02 },
         { date: '2024-02-01', price: 84.99, sales: 112, revenue: 9518.88 },
@@ -104,7 +161,9 @@ export default function AnalyticsPage() {
       name: 'Summer Dress Collection',
       image: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=150&h=150&fit=crop&crop=center',
       currentPrice: 65.99,
+      basePrice: 59.99,
       avgPrice: 62.00,
+      startingPrice: 59.99,
       totalSales: 675,
       totalRevenue: 44543.25,
       totalProfit: 13362.98,
@@ -115,6 +174,29 @@ export default function AnalyticsPage() {
       tags: ['apparel', 'dress', 'summer', 'collection'],
       vendor: 'Summer Trends',
       productType: 'Dress',
+      currentPeriod: {
+        revenue: 6723,
+        units: 102,
+        avgPrice: 65.91,
+        profitPerUnit: 19.78,
+        profit: 2017,
+        margin: 30.0
+      },
+      previousPeriod: {
+        revenue: 7148,
+        units: 120,
+        avgPrice: 59.57,
+        profitPerUnit: 17.87,
+        profit: 2144,
+        margin: 28.2
+      },
+      baseline: {
+        revenue: 6119,
+        profit: 1836
+      },
+      algorithmStatus: 'testing',
+      algorithmStrategy: 'Testing price ceiling (bandit exploration)',
+      priceElasticity: -1.12,
       priceHistory: [
         { date: '2024-01-01', price: 59.99, sales: 78, revenue: 4679.22 },
         { date: '2024-02-01', price: 59.99, sales: 85, revenue: 5099.15 },
@@ -403,132 +485,182 @@ export default function AnalyticsPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {filteredProducts.map((product) => (
-                    <div key={product.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <h3 className="font-semibold">{product.name}</h3>
-                          <p className="text-sm text-muted-foreground">{product.id}</p>
-                        </div>
-                        <Badge variant="secondary" className="text-lg px-3 py-1">
-                          {product.performanceScore}/10
-                        </Badge>
-                      </div>
+                  <div className="space-y-6">
+                    {filteredProducts.map((product) => {
+                      // Calculate comparisons
+                      const profitDelta = product.currentPeriod.profit - product.previousPeriod.profit;
+                      const profitDeltaPct = ((profitDelta / product.previousPeriod.profit) * 100).toFixed(1);
+                      const vsBaseline = ((product.currentPeriod.profit - product.baseline.profit) / product.baseline.profit * 100).toFixed(1);
                       
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
-                        <div className="flex items-center gap-3">
-                          <img 
-                            src={product.image} 
-                            alt={product.name}
-                            className="w-12 h-12 rounded-lg object-cover border flex-shrink-0"
-                          />
-                          <div className="text-left flex-1">
-                            {editingPrice === product.id ? (
-                              <div className="flex items-center gap-2">
-                                <div className="relative">
-                                  <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-green-600 font-semibold">$</span>
-                                  <Input
-                                    type="number"
-                                    value={editedPrices[product.id] || product.currentPrice.toString()}
-                                    onChange={(e) => setEditedPrices(prev => ({
-                                      ...prev,
-                                      [product.id]: e.target.value
-                                    }))}
-                                    className="pl-6 w-20 h-8 text-sm"
-                                    step="0.01"
-                                    min="0"
-                                  />
+                      const revenueDelta = product.currentPeriod.revenue - product.previousPeriod.revenue;
+                      const revenuePct = ((revenueDelta / product.previousPeriod.revenue) * 100).toFixed(1);
+                      
+                      const unitsDelta = product.currentPeriod.units - product.previousPeriod.units;
+                      const unitsPct = ((unitsDelta / product.previousPeriod.units) * 100).toFixed(1);
+                      
+                      const avgPriceDelta = product.currentPeriod.avgPrice - product.previousPeriod.avgPrice;
+                      const avgPricePct = ((avgPriceDelta / product.previousPeriod.avgPrice) * 100).toFixed(1);
+                      
+                      const profitPerUnitDelta = product.currentPeriod.profitPerUnit - product.previousPeriod.profitPerUnit;
+                      const profitPerUnitPct = ((profitPerUnitDelta / product.previousPeriod.profitPerUnit) * 100).toFixed(1);
+                      
+                      const marginDelta = product.currentPeriod.margin - product.previousPeriod.margin;
+                      
+                      // Get algorithm status
+                      const getStatusBadge = () => {
+                        if (product.algorithmStatus === 'success') {
+                          return { icon: CheckCircle2, label: 'Auto Optimizing', color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-950' };
+                        } else if (product.algorithmStatus === 'testing') {
+                          return { icon: Activity, label: 'Testing', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-950' };
+                        } else {
+                          return { icon: AlertTriangle, label: 'Needs Review', color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-950' };
+                        }
+                      };
+                      
+                      const statusBadge = getStatusBadge();
+                      
+                      return (
+                        <div key={product.id} className="border-2 rounded-lg p-6 hover:border-primary/40 transition-colors">
+                          {/* TIER 1: Glance Test - Hero Metrics */}
+                          <div className="mb-6">
+                            <div className="flex items-start justify-between mb-4">
+                              <div className="flex items-center gap-3">
+                                <img 
+                                  src={product.image} 
+                                  alt={product.name}
+                                  className="w-16 h-16 rounded-lg object-cover border"
+                                />
+                                <div>
+                                  <h3 className="text-xl font-bold">{product.name}</h3>
+                                  <p className="text-sm text-muted-foreground">{product.vendor} • {product.productType}</p>
                                 </div>
-                                <Button 
-                                  size="sm" 
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => handleSavePrice(product.id)}
-                                >
-                                  <Check className="h-4 w-4" />
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => handleCancelEdit(product.id)}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
                               </div>
-                            ) : (
-                              <div className="group relative">
-                                <div 
-                                  className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded-lg px-2 py-1 transition-colors"
-                                  onClick={() => handleEditPrice(product.id, product.currentPrice)}
-                                >
-                                  <p className="text-2xl font-bold text-green-600">
+                              <Badge className={`${statusBadge.bg} ${statusBadge.color} border-0`}>
+                                <statusBadge.icon className="h-3.5 w-3.5 mr-1.5" />
+                                {statusBadge.label}
+                              </Badge>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-4">
+                              <Card className="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/20 dark:to-green-950/10 border-green-200 dark:border-green-900">
+                                <CardContent className="p-4">
+                                  <p className="text-xs text-muted-foreground mb-1">Profit Δ (Last 30d)</p>
+                                  <p className="text-3xl font-bold text-green-600 mb-1">
+                                    +${profitDelta.toLocaleString()}
+                                  </p>
+                                  <p className="text-xs text-green-600 font-medium">
+                                    {parseFloat(profitDeltaPct) > 0 ? '+' : ''}{profitDeltaPct}% vs prev period
+                                  </p>
+                                </CardContent>
+                              </Card>
+                              
+                              <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/20 dark:to-blue-950/10 border-blue-200 dark:border-blue-900">
+                                <CardContent className="p-4">
+                                  <p className="text-xs text-muted-foreground mb-1">vs Baseline</p>
+                                  <p className="text-3xl font-bold text-blue-600 mb-1">
+                                    +{vsBaseline}%
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    +${(product.currentPeriod.profit - product.baseline.profit).toFixed(0)} more
+                                  </p>
+                                </CardContent>
+                              </Card>
+                              
+                              <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+                                <CardContent className="p-4">
+                                  <p className="text-xs text-muted-foreground mb-1">Current Price</p>
+                                  <p className="text-3xl font-bold text-primary mb-1">
                                     ${product.currentPrice}
                                   </p>
-                                  <Edit3 className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  <p className="text-xs text-muted-foreground">
+                                    from ${product.startingPrice} start
+                                  </p>
+                                </CardContent>
+                              </Card>
+                            </div>
+                          </div>
+                          
+                          {/* TIER 2: Understanding Layer - Detailed Breakdown */}
+                          <div className="space-y-4 mb-4">
+                            <div>
+                              <h4 className="text-sm font-semibold mb-2">Algorithm Activity:</h4>
+                              <div className="bg-muted/30 rounded-lg p-3 space-y-1">
+                                <p className="text-sm">
+                                  <span className="text-muted-foreground">Price Journey:</span>{' '}
+                                  <span className="font-medium">${product.startingPrice} → ${product.avgPrice} (avg) → ${product.currentPrice} (current)</span>
+                                </p>
+                                <p className="text-sm">
+                                  <span className="text-muted-foreground">Changes:</span>{' '}
+                                  <span className="font-medium">{product.priceChanges} adjustments this period</span>
+                                  {' • '}
+                                  <span className="text-muted-foreground">Strategy:</span>{' '}
+                                  <span className="font-medium">{product.algorithmStrategy}</span>
+                                </p>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <h4 className="text-sm font-semibold mb-3">Performance (Last 30d vs Previous 30d):</h4>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="bg-muted/30 rounded-lg p-3">
+                                  <p className="text-xs text-muted-foreground mb-1">Revenue</p>
+                                  <p className="text-lg font-bold">${product.currentPeriod.revenue.toLocaleString()}</p>
+                                  <p className={`text-xs font-medium flex items-center gap-1 ${parseFloat(revenuePct) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {parseFloat(revenuePct) >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                                    {revenuePct}% ({revenueDelta > 0 ? '+' : ''}${revenueDelta})
+                                  </p>
                                 </div>
                                 
-                                {/* Status indicators */}
-                                {priceUpdateStatus[product.id] === 'saving' && (
-                                  <div className="absolute -top-8 left-0 bg-blue-500 text-white text-xs px-2 py-1 rounded-md whitespace-nowrap">
-                                    Saving...
-                                  </div>
-                                )}
-                                {priceUpdateStatus[product.id] === 'success' && (
-                                  <div className="absolute -top-8 left-0 bg-green-500 text-white text-xs px-2 py-1 rounded-md whitespace-nowrap">
-                                    ✓ Price updated
-                                  </div>
-                                )}
-                                {priceUpdateStatus[product.id] === 'error' && (
-                                  <div className="absolute -top-8 left-0 bg-red-500 text-white text-xs px-2 py-1 rounded-md whitespace-nowrap">
-                                    ✗ Update failed
-                                  </div>
-                                )}
+                                <div className="bg-muted/30 rounded-lg p-3">
+                                  <p className="text-xs text-muted-foreground mb-1">Units Sold</p>
+                                  <p className="text-lg font-bold">{product.currentPeriod.units}</p>
+                                  <p className={`text-xs font-medium flex items-center gap-1 ${parseFloat(unitsPct) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {parseFloat(unitsPct) >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                                    {unitsPct}% ({unitsDelta > 0 ? '+' : ''}{unitsDelta})
+                                  </p>
+                                </div>
+                                
+                                <div className="bg-muted/30 rounded-lg p-3">
+                                  <p className="text-xs text-muted-foreground mb-1">Avg Price</p>
+                                  <p className="text-lg font-bold">${product.currentPeriod.avgPrice.toFixed(2)}</p>
+                                  <p className={`text-xs font-medium flex items-center gap-1 ${parseFloat(avgPricePct) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {parseFloat(avgPricePct) >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                                    {avgPricePct}% (+${avgPriceDelta.toFixed(2)})
+                                  </p>
+                                </div>
+                                
+                                <div className="bg-primary/5 rounded-lg p-3 border-2 border-primary/20">
+                                  <p className="text-xs text-muted-foreground mb-1">Profit/Unit ⭐</p>
+                                  <p className="text-lg font-bold text-primary">${product.currentPeriod.profitPerUnit.toFixed(2)}</p>
+                                  <p className={`text-xs font-medium flex items-center gap-1 ${parseFloat(profitPerUnitPct) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {parseFloat(profitPerUnitPct) >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                                    {profitPerUnitPct}% (+${profitPerUnitDelta.toFixed(2)})
+                                  </p>
+                                </div>
+                                
+                                <div className="bg-muted/30 rounded-lg p-3">
+                                  <p className="text-xs text-muted-foreground mb-1">Margin</p>
+                                  <p className="text-lg font-bold">{product.currentPeriod.margin.toFixed(1)}%</p>
+                                  <p className={`text-xs font-medium ${marginDelta >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {marginDelta >= 0 ? '+' : ''}{marginDelta.toFixed(1)}pp (was {product.previousPeriod.margin}%)
+                                  </p>
+                                </div>
                               </div>
-                            )}
-                            <p className="text-xs text-muted-foreground">Current Price</p>
-                            <p className="text-xs">
-                              vs ${product.avgPrice} avg
-                            </p>
+                            </div>
+                          </div>
+                          
+                          {/* TIER 3: Action Layer - Insights */}
+                          <div className="border-t pt-4">
+                            <div className="flex items-start gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <p className="text-sm text-muted-foreground">
+                                <span className="font-medium text-foreground">Strong performance</span> - Algorithm found optimal price range and is maximizing profit per unit.
+                              </p>
+                            </div>
                           </div>
                         </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold">
-                            {product.totalSales.toLocaleString()}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Total Sales</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-blue-600">
-                            ${product.totalRevenue.toLocaleString()}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Revenue</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-purple-600">
-                            {product.profitMargin}%
-                          </p>
-                          <p className="text-xs text-muted-foreground">Profit Margin</p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-4">
-                          <span className="flex items-center gap-1">
-                            <Target className="h-4 w-4" />
-                            {product.conversionRate}% conversion
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Package className="h-4 w-4" />
-                            {product.priceChanges} price changes
-                          </span>
-                        </div>
-                        <div className="flex gap-2">
-                          <Progress value={product.performanceScore * 10} className="w-20" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

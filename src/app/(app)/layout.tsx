@@ -11,15 +11,15 @@ import { useAuth, useAuthHydration } from '@/features/auth';
 import { usePathname } from 'next/navigation';
 import { Separator } from '@/shared/components/ui/separator';
 import { Toaster } from '@/shared/components/ui/sonner';
+import { Switch } from '@/shared/components/ui/switch';
+import { Zap } from 'lucide-react';
+import { SmartPricingProvider, useSmartPricing } from '@/features/pricing-engine';
 
-export default function AppLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, isLoading, isInitialized } = useAuth();
+  const { globalEnabled, setGlobalEnabled } = useSmartPricing();
   
   // Handle auth hydration to prevent hydration mismatch
   useAuthHydration();
@@ -72,7 +72,21 @@ export default function AppLayout({
             <div className="flex items-center gap-2">
               {/* Page title will be rendered here by child pages */}
             </div>
-            <UserMenu />
+            <div className="flex items-center gap-4">
+              {/* Global Smart Pricing Toggle */}
+              <div className="flex items-center gap-3 px-3 py-2 rounded-lg border bg-card">
+                <div className="flex items-center gap-2">
+                  <Zap className={`h-4 w-4 ${globalEnabled ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span className="text-sm font-medium">Smart Pricing</span>
+                </div>
+                <Switch 
+                  checked={globalEnabled}
+                  onCheckedChange={setGlobalEnabled}
+                  aria-label="Toggle smart pricing globally"
+                />
+              </div>
+              <UserMenu />
+            </div>
           </div>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 pt-6">
@@ -81,5 +95,17 @@ export default function AppLayout({
       </SidebarInset>
       <Toaster />
     </SidebarProvider>
+  );
+}
+
+export default function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <SmartPricingProvider>
+      <AppLayoutContent>{children}</AppLayoutContent>
+    </SmartPricingProvider>
   );
 }
