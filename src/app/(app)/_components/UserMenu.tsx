@@ -20,7 +20,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
-import { Button } from './ui/button';
+import { Button } from '@/shared/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +32,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
   DropdownMenuPortal,
-} from './ui/dropdown-menu';
-import { Badge } from './ui/badge';
+} from '@/shared/components/ui/dropdown-menu';
+import { Badge } from '@/shared/components/ui/badge';
 import { useAuth } from '@/features/auth';
 
 export function UserMenu() {

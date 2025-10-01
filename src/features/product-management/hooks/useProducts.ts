@@ -3,8 +3,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { ProductWithPricing, ProductFilter, ProductPricing } from '../types';
-import type { ShopifyProduct } from '@/features/shopify-integration/types';
-import { getShopifyClient } from '@/features/shopify-integration/services/shopifyClient';
+import type { ShopifyProduct } from '@/features/shopify-integration';
+import { getShopifyClient } from '@/features/shopify-integration';
 
 // Function to add pricing data to Shopify products
 function addPricingToProduct(shopifyProduct: ShopifyProduct): ProductWithPricing {

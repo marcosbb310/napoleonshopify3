@@ -20,8 +20,7 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
-} from './ui/sidebar';
-import { useAuth } from '@/features/auth';
+} from '@/shared/components/ui/sidebar';
 
 const menuItems = [
   {
@@ -89,3 +88,4 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+

@@ -3,8 +3,10 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useProducts, type ProductFilter, type ProductWithPricing } from '@/features/product-management';
-import {
+import { 
+  useProducts, 
+  type ProductFilter, 
+  type ProductWithPricing,
   ProductCard,
   ProductList,
   BulkEditToolbar,
@@ -13,7 +15,7 @@ import {
   NewProductModal,
   ProductCardSkeleton,
   ProductListSkeleton,
-} from '@/features/product-management/components';
+} from '@/features/product-management';
 import type { ViewMode } from '@/shared/types';
 import { Card } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
