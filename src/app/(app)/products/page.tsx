@@ -15,7 +15,7 @@ import {
   ProductCardSkeleton,
   ProductListSkeleton,
 } from '@/features/product-management';
-import { useSmartPricing } from '@/features/pricing-engine';
+// import { useSmartPricing } from '@/features/pricing-engine';
 import type { ViewMode } from '@/shared/types';
 import { DateRangePicker } from '@/shared/components';
 import { Card } from '@/shared/components/ui/card';
@@ -39,7 +39,11 @@ export default function ProductsPage() {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [showingVariantsForProduct, setShowingVariantsForProduct] = useState<string | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
-  const { isProductEnabled, setProductState, setMultipleProductStates } = useSmartPricing();
+  // const { isProductEnabled, setProductState, setMultipleProductStates } = useSmartPricing();
+  // Temporary stubs until UI integration is complete
+  const isProductEnabled = () => true;
+  const setProductState = () => {};
+  const setMultipleProductStates = () => {};
   
   // Date range state - defaults to last 30 days
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
