@@ -4,9 +4,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/shared/components/ui/sidebar';
-import { AuthSkeleton, AuthInitSkeleton } from '@/shared/components';
-import { AppSidebar } from './_components/AppSidebar';
-import { UserMenu } from './_components/UserMenu';
+import { AuthSkeleton, AuthInitSkeleton, AppSidebar, UserMenu } from '@/shared/components';
 import { useAuth, useAuthHydration } from '@/features/auth';
 import { usePathname } from 'next/navigation';
 import { Separator } from '@/shared/components/ui/separator';

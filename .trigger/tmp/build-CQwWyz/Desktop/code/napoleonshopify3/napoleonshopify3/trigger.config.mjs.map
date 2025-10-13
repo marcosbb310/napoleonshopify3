@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../../../trigger.config.ts"],
+  "sourcesContent": ["import { defineConfig } from \"@trigger.dev/sdk\";\n\nexport default defineConfig({\n  // Your Napoleonshopify3 project ref\n  project: \"proj_nxpixyqfcgkpqzhsfemo\",\n\n  // Directories containing your tasks\n  dirs: [\"./src/trigger\"],\n\n  // Retry configuration\n  retries: {\n    enabledInDev: true,\n    default: {\n      maxAttempts: 3,\n      minTimeoutInMs: 1000,\n      maxTimeoutInMs: 10000,\n      factor: 2,\n      randomize: true,\n    },\n  },\n\n  // Max duration of a task in seconds (1 hour)\n  maxDuration: 3600,\n\n  build: {},\n});\n\nexport const resolveEnvVars = undefined;"],
+  "mappings": ";;;;;;;;;AAAA;AAEA,IAAO,yBAAQ,aAAa;AAAA;AAAA,EAE1B,SAAS;AAAA;AAAA,EAGT,MAAM,CAAC,eAAe;AAAA;AAAA,EAGtB,SAAS;AAAA,IACP,cAAc;AAAA,IACd,SAAS;AAAA,MACP,aAAa;AAAA,MACb,gBAAgB;AAAA,MAChB,gBAAgB;AAAA,MAChB,QAAQ;AAAA,MACR,WAAW;AAAA,IACb;AAAA,EACF;AAAA;AAAA,EAGA,aAAa;AAAA,EAEb,OAAO,CAAC;AACV,CAAC;AAEM,IAAM,iBAAiB;",
+  "names": []
+}

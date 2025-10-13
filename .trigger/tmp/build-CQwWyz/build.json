@@ -1,0 +1,64 @@
+{
+  "contentHash": "a060920e16d16b31c9421771ebc8ddad",
+  "runtime": "node",
+  "environment": "dev",
+  "packageVersion": "4.0.4",
+  "cliPackageVersion": "4.0.4",
+  "target": "dev",
+  "files": [
+    {
+      "entry": "src/trigger/daily-pricing.ts",
+      "out": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-CQwWyz/Desktop/code/napoleonshopify3/napoleonshopify3/src/trigger/daily-pricing.mjs"
+    },
+    {
+      "entry": "src/trigger/index.ts",
+      "out": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-CQwWyz/Desktop/code/napoleonshopify3/napoleonshopify3/src/trigger/index.mjs"
+    }
+  ],
+  "sources": {
+    "src/trigger/daily-pricing.ts": {
+      "contents": "eJxtVMFu00AQvecrBotKTpTaUIlLSisqyqFIJagp53ZrT+wl611rd91gqkhcuCBu3BCo/9Yv6Ccwu2vHqYSiRNF65r03782aV7XSFu7AZCXmjUADG1hqVUH0xmpeFKiTHG9Tk6+iwxHvq3UjP2qecVmciEJpbstq6EuXyGyj0aR1qNlHWXCJBDBKJ5MRTOCUcdFCBwHz2vKKf2WWKwmXzKxcifteNNIA3qJuIWctMAsHcHIOny7fglVAirMVMCGg1ipvMmtgTUoAJbsRmIOpGIntNDg4JnNo6pxZ9Kc06w0zVEismlhkQ+eol0pXTGaY9CouSySWbsyZO9mHuST9REsghnAGASVqBIlf7JWnuMpKJgu88qSvj0g2DRIgzmSmkYXuIKaFV3vduAduYBMKz5XkVmmzFenmcP81EfIlcAu5VrWB45d7oeMCTY1ODg3SMBEIIEgxcMsZrPGmVGoFXFostHeeWtMRfvEJZ0oaQnUpdSG5WOBoWJPE0kF8NwLg+QwiX7rf5612Ao2mVJOmLssnAW5jpceZVpJAXtDTifv4HtqxGTDTygzimrVCsXwMR8fgOMErVAIToYo4erz//Q0WluJ26+S19LkPyTnAJEmi8aEH2KJY8tI0wtJ0bM3IzP8sd7zbRJbHz0JPYprMrcC4UzXoQq2VjqOHvz9huCIoM9WQ45qWzheYWTTt6EOH6YgAbKnVmjZpDe881PUOTGiF53dPWpPPisuYAKPx5rrD2TyddevYw5/v2+s3OJSpqhZo3d0Jcy0bIdresV2A68f7Xz+c5dbreL+Yf0gMvTDooi/buDfHPZ6CJJApHAyi/I9GekfIrW+UTOia9vPzCgmgqmfehFO6QPE4sepsMV94ongcSjcOdDMdbQh99A+hKJYc",
+      "contentHash": "d7a1c3462af224efa2de3673495d7292"
+    },
+    "src/trigger/index.ts": {
+      "contents": "eJxlzLsRwjAQBNBcVew4ZEBXADFUQAMCLeLGAntOMobusUYh6X6eCE6febKKkDMupinRfOQbNZSxOPZyh7tNTwxeYtD8PcymN32l4eicCM5LXYz9gVU36Er0JyMeNLYVffJ7/IErOW6iseWliT93CTDt",
+      "contentHash": "749c9bf6357c6e1fe7865a3fcc85c1db"
+    },
+    "trigger.config.ts": {
+      "contents": "eJxlUT1PwzAQ3fMrTplaKWpaKjGEBUSXDmVALAghZOpzerSx07NTJa3y37mEhA8x2X733t17ZypKxwEuoNGQxXtnDeXQgmFXQHwbmPIceabxlHq9j2+iCOteIXxVHcIf3eQSAZTsPnAbMoi725utS6qbo9nm+/J43nmDhYsTSFN4dhXDgyrdAZ31O1eSaZajHBiNNBPailjejgk9bJ0NiizZHJpOHZTfe6FpYp/BSzxLPW/TwXT8mnx1eMTATacVixWrQM5KgQWVnhl0pgHQqvcD6rVd4SmDwBUmPT7kHGkAharvQsCiDKJdJiNK9okKdFVY240UFvP5PPlR/Kt9F43qwmVwNQKsrHYFnfG3i7Y72iHPRtWghyDgDKh+D0AWPEpK7WGygJ3sZxr1w1cDV+xed4PbqXzjJ2R4n/U=",
+      "contentHash": "c24ea26ec6283a3b03764bb7503e2e12"
+    },
+    "tsconfig.json": {
+      "contents": "eJxdUctqwzAQvPsrjI4mtdteCj0VSg4NDYX2GEyRrSVRohfS2nUJ/vdqFZvGOWk1Mxrt7J6zPGet1U4q8B8OpTWBPefnCEcCud8Dxjtbfz3ePzyx1QVXsongjgmr2Sqno5QInjcK6A7BwICsntRcKfuzIVv0HUxgOEn3LpvXA7SnGwa9bHGJGbvW8gaDsLWiU/Bm4tfWLUmdKOp8amaBf0KwqqOwpGg6I2L6WeKJ7GETrNnOLlfOMrIcQVy4m1THMJCjix7ge5gtpWk9aDDI1VLvVLeXaeK7BOTT5C+huU4JUv8TPKZznqzjePhfVwReqiItpqyCb2NdZ/OjkZ5QI6oTkDRkewemL0WJgdZWFFWxLAeqSxJW+OsgVLMkNcBguHKzAr71NJM6G7M/XPaodg==",
+      "contentHash": "0cf97a81150d3b8904f285780896980d"
+    },
+    "package.json": {
+      "contents": "eJyNVtty4yAMfe9XZPq8OHEuTXef+rDf0RmCicMGIwZwmnZn/30FxkAvtB0/2Igj+SAdS/57s1jcKjrw21/+rkFyUPYEWhyfN7c//O6FGytAecCqaZvVZNVGXKjzbs6MPJgsM0I7i6a/uERDxy8hLL+6BT4vCHGjOYCm7ByCIOQwCtklUFh9BLOOGpdg0ypuSaHCDrfhKVqdEX3Pza+Zgr4uoqlB04NE6jaQeu+gJTx/6hMA6PUvnBrXXHVcMcGLoz+cAM5HMMPScAvS59DHfNw162Y9v/PB0E5cySgQRJkjlDEwXcz1Y4vQto6V3DjSCSqhj3C8dlW41RxvhjoBCb6vorG01OSwqxqQnTg7H+AaoZtmU0WClFRbcZA8x62ejoFyWGkycDUG+Non464G/3YaOgO6gydVBm4/CXwCrBxh1HTfCC7pgcsUtJpc/+pDmd3q2xW9iN5XrOAbVLGteWjQnvE3yGoDPUrTfi0GvwTSGxh1KvN9DYw9AAtNKK4y3ap8LJeoylTgaiIs1xSlC+ZrttgFupSAzSchJbjEsKpa+yQcOyVcNZqjh5zJthrOQd+X+q8mZgK+SjpebR0O0gmdeOby2FHTA7V8OT+QPzbme79r8vuLRre03TlAts2qSUpjklpLLtQIqhgndHQnMMKFTvm4avZNm5H2mj+tZB1i1La0dthTyVHZ+L42M+LDQVL/5cGIKiHhnAF139xllFB6dATcfPRtbq5yZKiEwnHV7Lbb7Oonibe3u2aXj+mtxJ34wG102uaqp1jtz5JqbC30mWjBzlF8iHgPgaHm7ccF8fMiOO+bu81bBH6s4oVi+ySaKi4neogq6bETDsa5vm1xLAtKRWJrdElfj6NCPgnVYX8xPY8hN7k+FzrKVLWU2hfoUsGyKF9GnMuqi2NuhSIsZuTl98djcpray+lm2HsGDzNFZu1Sg3Us9qzcA92z5napoJsOsMa/FMzw/s1+FkLIf9EZi/25RBPm5wxBtYM2/Ciuc2vxulgnkvHfI9T9tc1PsqPoyay2x9dyiyAtx14oIgYNZm6Hm3VWQHnue/RPJUdSzolICrtdrtG8M8cu0hiFfVfMkbe7H20QqsQw/fJ5PZQqepr3CEsTpfjUQoLDz+EkjiCMm383/wEolOeT",
+      "contentHash": "e72bd97601626bd91b5895cbe8f1e065"
+    }
+  },
+  "externals": [
+    {
+      "name": "import-in-the-middle",
+      "version": "1.11.0"
+    }
+  ],
+  "config": {
+    "project": "proj_nxpixyqfcgkpqzhsfemo",
+    "dirs": [
+      "./src/trigger"
+    ]
+  },
+  "outputPath": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-CQwWyz",
+  "indexWorkerEntryPoint": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-CQwWyz/.npm/_npx/f51a09bd0abf5f10/node_modules/trigger.dev/dist/esm/entryPoints/dev-index-worker.mjs",
+  "runWorkerEntryPoint": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-CQwWyz/.npm/_npx/f51a09bd0abf5f10/node_modules/trigger.dev/dist/esm/entryPoints/dev-run-worker.mjs",
+  "configPath": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-CQwWyz/Desktop/code/napoleonshopify3/napoleonshopify3/trigger.config.mjs",
+  "customConditions": [],
+  "deploy": {
+    "env": {}
+  },
+  "build": {},
+  "otelImportHook": {
+    "include": []
+  }
+}
