@@ -20,6 +20,23 @@ export async function runPricingAlgorithm(): Promise<AlgorithmResult> {
   const errors: string[] = [];
 
   try {
+    // Check if global smart pricing is enabled
+    const { data: globalSetting } = await supabaseAdmin
+      .from('global_settings')
+      .select('value')
+      .eq('key', 'smart_pricing_global_enabled')
+      .single();
+
+    const globalEnabled = globalSetting?.value === true || globalSetting?.value === 'true';
+
+    if (!globalEnabled) {
+      return { 
+        success: true, 
+        stats, 
+        errors: ['Global smart pricing is disabled'] 
+      };
+    }
+
     // Get all products with autopilot enabled
     const { data: products } = await supabaseAdmin
       .from('products')
@@ -91,7 +108,7 @@ async function processProduct(product: any, config: any, stats: any) {
   }
 
   // Step 4: Get revenue data
-  const revenue = await getRevenue(product.id, config.period_days);
+  const revenue = await getRevenue(product.id, config.period_hours);
 
   // Step 5: Decide what to do
   if (!revenue.hasSufficientData) {
@@ -109,10 +126,10 @@ async function processProduct(product: any, config: any, stats: any) {
 /**
  * Get revenue comparison
  */
-async function getRevenue(productId: string, periodDays: number) {
+async function getRevenue(productId: string, periodHours: number) {
   const now = new Date();
-  const currentStart = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
-  const previousStart = new Date(currentStart.getTime() - periodDays * 24 * 60 * 60 * 1000);
+  const currentStart = new Date(now.getTime() - periodHours * 60 * 60 * 1000);
+  const previousStart = new Date(currentStart.getTime() - periodHours * 60 * 60 * 1000);
 
   const { data: currentData } = await supabaseAdmin
     .from('sales_data')
@@ -206,7 +223,7 @@ async function updatePrice(product: any, config: any, newPrice: number, action: 
     .eq('id', product.id);
 
   const now = new Date();
-  const nextChange = new Date(now.getTime() + config.period_days * 24 * 60 * 60 * 1000);
+  const nextChange = new Date(now.getTime() + config.period_hours * 60 * 60 * 1000);
   
   await supabaseAdmin
     .from('pricing_config')

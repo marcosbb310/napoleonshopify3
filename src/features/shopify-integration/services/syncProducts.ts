@@ -146,7 +146,7 @@ async function syncSingleProduct(shopifyProduct: ShopifyProduct): Promise<void> 
         product_id: newProduct.id,
         auto_pricing_enabled: true,
         increment_percentage: 5.0,
-        period_days: 2,
+        period_hours: 24,
         revenue_drop_threshold: 1.0,
         wait_days_after_revert: 2,
         max_increase_percentage: 100.0,

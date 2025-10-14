@@ -1,6 +1,6 @@
 // API endpoint to manually trigger pricing algorithm
 import { NextResponse } from 'next/server';
-import { runPricingAlgorithm } from '@/features/pricing-engine';
+import { runPricingAlgorithm } from '@/features/pricing-engine/services/pricingAlgorithm';
 
 export async function POST() {
   try {

@@ -41,3 +41,25 @@ export interface PricingStrategy {
   rules: PricingRule[];
   enabled: boolean;
 }
+
+// Smart pricing toggle types
+export interface ProductSnapshot {
+  productId: string;
+  shopifyId: string;
+  price: number;
+  auto_pricing_enabled: boolean;
+  current_state?: string;
+  next_price_change_date?: string | null;
+  revert_wait_until_date?: string | null;
+}
+
+export type UndoActionType = 'global-on' | 'global-off' | 'individual-on' | 'individual-off';
+
+export interface UndoState {
+  action: UndoActionType;
+  timestamp: number;
+  productSnapshots: ProductSnapshot[];
+  description: string;
+}
+
+export type ResumeOption = 'base' | 'last';

@@ -545,7 +545,7 @@ export function ProductCard({
               >
                 <Zap className={`h-4 w-4 ${smartPricingEnabled ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
                 <span className="text-sm">
-                  {smartPricingEnabled ? 'Smart Pricing Active' : 'Smart Pricing Paused'}
+                  {smartPricingEnabled ? 'Smart Pricing Active' : 'Smart Pricing Off'}
                 </span>
               </button>
             </div>

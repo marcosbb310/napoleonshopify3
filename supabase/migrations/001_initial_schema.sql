@@ -1,5 +1,7 @@
--- Initial database schema for Smart Pricing Algorithm
--- Run this in Supabase SQL Editor
+-- Complete Smart Pricing Database Schema
+-- This is the master schema file with all features
+-- For fresh database setup, run this entire file in Supabase SQL Editor
+-- Last updated: October 13, 2025 (period_hours implemented)
 
 -- Create enum types
 CREATE TYPE pricing_state AS ENUM ('increasing', 'waiting_after_revert', 'at_max_cap');
@@ -25,7 +27,7 @@ CREATE TABLE pricing_config (
   product_id UUID REFERENCES products(id) ON DELETE CASCADE,
   auto_pricing_enabled BOOLEAN DEFAULT TRUE,
   increment_percentage DECIMAL(5, 2) DEFAULT 5.0,
-  period_days INTEGER DEFAULT 2,
+  period_hours INTEGER DEFAULT 24,
   revenue_drop_threshold DECIMAL(5, 2) DEFAULT 1.0,
   wait_days_after_revert INTEGER DEFAULT 2,
   max_increase_percentage DECIMAL(5, 2) DEFAULT 100.0,
@@ -106,4 +108,8 @@ ALTER TABLE pricing_config DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pricing_history DISABLE ROW LEVEL SECURITY;
 ALTER TABLE sales_data DISABLE ROW LEVEL SECURITY;
 ALTER TABLE algorithm_runs DISABLE ROW LEVEL SECURITY;
+
+-- Add helpful comments for documentation
+COMMENT ON COLUMN pricing_config.period_hours IS 'Number of hours between price changes (default: 24 = 1 day). Can be set to 1 for fast testing.';
+COMMENT ON COLUMN pricing_config.next_price_change_date IS 'Timestamp when the next price change should occur. Updated after each price change and manual overrides.';
 

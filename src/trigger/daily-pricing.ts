@@ -1,5 +1,5 @@
 import { schedules } from "@trigger.dev/sdk";
-import { runPricingAlgorithm } from "@/features/pricing-engine";
+import { runPricingAlgorithm } from "@/features/pricing-engine/services/pricingAlgorithm";
 
 /**
  * Daily Pricing Optimization Task

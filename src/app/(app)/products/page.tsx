@@ -15,12 +15,19 @@ import {
   ProductCardSkeleton,
   ProductListSkeleton,
 } from '@/features/product-management';
-// import { useSmartPricing } from '@/features/pricing-engine';
+import { 
+  useSmartPricing, 
+  useUndoState, 
+  SmartPricingResumeModal, 
+  SmartPricingConfirmDialog,
+  UndoButton 
+} from '@/features/pricing-engine';
 import type { ViewMode } from '@/shared/types';
 import { DateRangePicker } from '@/shared/components';
 import { Card } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
+import { Switch } from '@/shared/components/ui/switch';
 import { X, Check, Undo2, Zap, ZapOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { DateRange } from 'react-day-picker';
@@ -39,11 +46,28 @@ export default function ProductsPage() {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [showingVariantsForProduct, setShowingVariantsForProduct] = useState<string | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
-  // const { isProductEnabled, setProductState, setMultipleProductStates } = useSmartPricing();
-  // Temporary stubs until UI integration is complete
-  const isProductEnabled = () => true;
-  const setProductState = () => {};
-  const setMultipleProductStates = () => {};
+  const { 
+    globalEnabled, 
+    handleGlobalToggle,
+    confirmGlobalDisable,
+    confirmGlobalEnable,
+    confirmGlobalResume,
+    isLoadingGlobal,
+    showGlobalConfirm,
+    setShowGlobalConfirm,
+    showGlobalResumeModal,
+    setShowGlobalResumeModal,
+    pendingGlobalAction,
+    globalPriceOptions,
+    globalSnapshots,
+    setGlobalSnapshots,
+    isProductEnabled, 
+    setProductState, 
+    setMultipleProductStates 
+  } = useSmartPricing();
+
+  // Undo state management
+  const { canUndo, formatTimeRemaining, setUndo, executeUndo, undoState } = useUndoState();
   
   // Date range state - defaults to last 30 days
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -53,6 +77,36 @@ export default function ProductsPage() {
 
   // Get all products (no loading state for filtering/searching)
   const { products: allProducts, loading, error, refetch } = useProducts();
+
+  // Set undo state when global snapshots change and auto-reload
+  useEffect(() => {
+    if (globalSnapshots && globalSnapshots.length > 0) {
+      console.log('🔄 Global snapshots received:', globalSnapshots.length);
+      
+      const action = globalEnabled ? 'global-on' : 'global-off';
+      const description = globalEnabled 
+        ? `enabled for ${globalSnapshots.length} products`
+        : `disabled for ${globalSnapshots.length} products`;
+      
+      console.log('💾 Saving undo state:', action, description);
+      
+      // Save undo state (persists to localStorage)
+      setUndo(action, globalSnapshots, description);
+      
+      console.log('🔄 Reloading page in 500ms...');
+      
+      // Auto-reload page to show updated prices (undo state persists via localStorage)
+      setTimeout(() => {
+        console.log('🔄 Reloading now...');
+        window.location.reload();
+      }, 500);
+      
+      // Don't clear snapshots until after reload
+      return () => {
+        setGlobalSnapshots(null);
+      };
+    }
+  }, [globalSnapshots, globalEnabled, setUndo, setGlobalSnapshots]);
   const [products, setProducts] = useState<ProductWithPricing[]>([]);
   const [productUpdates, setProductUpdates] = useState<Map<string, Partial<ProductWithPricing['pricing']>>>(new Map());
   const [lastBulkAction, setLastBulkAction] = useState<{
@@ -400,7 +454,42 @@ export default function ProductsPage() {
     <div className="space-y-6 relative">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+          <div className="flex items-center gap-4 mb-2">
+            <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+            {/* Global Smart Pricing Toggle */}
+            <div className="flex items-center gap-3 px-4 py-2 rounded-lg border bg-card shadow-sm">
+              <div className="flex items-center gap-2">
+                <Zap className={`h-4 w-4 ${globalEnabled ? 'text-primary' : 'text-muted-foreground'}`} />
+                <span className="text-sm font-medium">Smart Pricing</span>
+                <Badge variant={globalEnabled ? 'default' : 'secondary'} className="text-xs">
+                  {globalEnabled ? 'ON' : 'OFF'}
+                </Badge>
+              </div>
+              <Switch 
+                checked={globalEnabled}
+                onCheckedChange={() => handleGlobalToggle(globalEnabled)}
+                disabled={isLoadingGlobal}
+                aria-label="Toggle smart pricing globally"
+              />
+            </div>
+            {/* Undo Button */}
+            {canUndo && (
+              <UndoButton
+                onClick={async () => {
+                  const result = await executeUndo();
+                  if (result.success) {
+                    toast.success(`Undone: ${undoState?.description}`);
+                    // Reload page to show restored prices
+                    window.location.reload();
+                  } else {
+                    toast.error('Failed to undo');
+                  }
+                }}
+                description={undoState?.description || ''}
+                timeRemaining={formatTimeRemaining()}
+              />
+            )}
+          </div>
           <p className="text-muted-foreground">
             {selectedIds.size === 0 
               ? 'Manage your products and pricing'
@@ -666,6 +755,25 @@ export default function ProductsPage() {
       <SelectionBar
         selectedCount={selectedIds.size}
         onClearSelection={handleClearSelection}
+      />
+
+      {/* Global Smart Pricing Confirmation Dialog */}
+      <SmartPricingConfirmDialog
+        open={showGlobalConfirm}
+        onOpenChange={setShowGlobalConfirm}
+        onConfirm={pendingGlobalAction === 'disable' ? confirmGlobalDisable : confirmGlobalEnable}
+        type={pendingGlobalAction === 'disable' ? 'global-disable' : 'global-enable'}
+        productCount={allProducts.length}
+      />
+
+      {/* Global Smart Pricing Resume Modal */}
+      <SmartPricingResumeModal
+        open={showGlobalResumeModal}
+        onOpenChange={setShowGlobalResumeModal}
+        onConfirm={confirmGlobalResume}
+        productCount={allProducts.length}
+        basePrice={globalPriceOptions?.base || 0}
+        lastSmartPrice={globalPriceOptions?.last || 0}
       />
     </div>
   );

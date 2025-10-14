@@ -9,15 +9,12 @@ import { useAuth, useAuthHydration } from '@/features/auth';
 import { usePathname } from 'next/navigation';
 import { Separator } from '@/shared/components/ui/separator';
 import { Toaster } from '@/shared/components/ui/sonner';
-import { Switch } from '@/shared/components/ui/switch';
-import { Zap } from 'lucide-react';
-// import { SmartPricingProvider, useSmartPricing } from '@/features/pricing-engine';
+import { SmartPricingProvider } from '@/features/pricing-engine';
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, isLoading, isInitialized } = useAuth();
-  // const { globalEnabled, setGlobalEnabled } = useSmartPricing();
   
   // Handle auth hydration to prevent hydration mismatch
   useAuthHydration();
@@ -102,8 +99,8 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   return (
-    // <SmartPricingProvider>
+    <SmartPricingProvider>
       <AppLayoutContent>{children}</AppLayoutContent>
-    // </SmartPricingProvider>
+    </SmartPricingProvider>
   );
 }
