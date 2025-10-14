@@ -53,24 +53,42 @@
 
 ### New Files:
 ```
+# Core Infrastructure
 src/shared/lib/supabase.ts                                    # Supabase client
+
+# Shopify Integration
 src/features/shopify-integration/services/syncProducts.ts     # Product sync
 src/features/shopify-integration/services/syncOrders.ts       # Order sync
-src/features/pricing-engine/services/pricingAlgorithm.ts      # CORE ALGORITHM
+
+# Pricing Engine (Core Algorithm)
+src/features/pricing-engine/services/pricingAlgorithm.ts      # CORE ALGORITHM (277 lines)
+
+# API Endpoints
 src/app/api/shopify/sync/route.ts                            # Sync endpoint
 src/app/api/shopify/sync-orders/route.ts                     # Order sync endpoint
 src/app/api/pricing/run/route.ts                             # Manual algorithm trigger
 src/app/api/pricing/config/[productId]/route.ts              # Config management
 src/app/api/pricing/history/[productId]/route.ts             # Price history
 src/app/api/pricing/check-config/route.ts                    # Check all configs
+src/app/api/webhooks/shopify/product-update/route.ts         # Webhook for manual price changes ✅
+
+# Trigger.dev Scheduled Tasks
+trigger.config.ts                                             # Trigger.dev project config
+src/trigger/daily-pricing.ts                                 # Daily 2 AM UTC task ✅
+src/trigger/index.ts                                          # Task exports
+
+# Database Migrations
 supabase/migrations/001_initial_schema.sql                   # Database schema
-supabase/migrations/002_update_config_defaults.sql           # Config defaults
-supabase/migrations/003_add_next_price_change_date.sql       # Add next change tracking
+supabase/migrations/002_update_config_defaults.sql           # Config defaults (deleted after applied)
+supabase/migrations/003_add_next_price_change_date.sql       # Add next change tracking (deleted after applied)
+
+# Documentation
+TRIGGER_SETUP.md                                              # Complete Trigger.dev guide
 ```
 
 ### Modified Files:
 ```
-package.json                              # Added @supabase/supabase-js
+package.json                              # Added @supabase/supabase-js, @trigger.dev/sdk
 src/features/pricing-engine/index.ts      # Export algorithm
 src/features/shopify-integration/index.ts # Export sync services
 src/app/(app)/layout.tsx                  # Commented out UI hooks (temporary)
@@ -132,19 +150,71 @@ curl -X POST http://localhost:3000/api/shopify/sync-orders
 
 ---
 
+## ✅ ALREADY IMPLEMENTED (Just Needs Configuration!)
+
+### Shopify Webhook System
+**Status:** ✅ Fully coded and ready  
+**File:** `src/app/api/webhooks/shopify/product-update/route.ts`
+
+**What it does:**
+- Receives Shopify product update notifications
+- Verifies webhook authenticity with HMAC signature
+- Detects manual price changes in Shopify
+- Updates database with new price
+- Resets `next_price_change_date` to restart 2-day cycle
+
+**To activate:**
+1. Add to `.env.local`:
+   ```bash
+   SHOPIFY_WEBHOOK_SECRET=your_secret_from_shopify
+   ```
+2. In Shopify Admin → Settings → Notifications → Webhooks:
+   - Create webhook for "Product update"
+   - URL: `https://yourdomain.com/api/webhooks/shopify/product-update`
+   - Copy the secret Shopify generates → paste in `.env.local`
+
+### Trigger.dev Scheduled Task
+**Status:** ✅ Fully coded and ready  
+**Files:** 
+- `src/trigger/daily-pricing.ts` - Daily scheduled task
+- `src/trigger/index.ts` - Task exports
+- `trigger.config.ts` - Trigger.dev configuration
+
+**What it does:**
+- Runs pricing algorithm every day at 2 AM UTC
+- Processes all products where `next_price_change_date <= today`
+- Automatically retries on failure (3x with exponential backoff)
+- Logs everything to Trigger.dev dashboard
+
+**To activate:**
+1. Add to `.env.local`:
+   ```bash
+   TRIGGER_SECRET_KEY=tr_dev_xxxxx  # Get from https://cloud.trigger.dev
+   ```
+2. Local testing: `npm run trigger:dev`
+3. Production deploy: `npm run trigger:deploy`
+
+**See TRIGGER_SETUP.md for complete documentation!**
+
+---
+
 ## 📋 TODO for Next Session
 
 ### Critical (Before Production):
 
-- [ ] **Shopify Webhooks** - Detect manual price changes
-  - Endpoint: `/api/webhooks/shopify/product-update`
+- [x] **Shopify Webhooks** - ✅ ALREADY IMPLEMENTED
+  - Endpoint: `/api/webhooks/shopify/product-update/route.ts`
+  - ⚠️ **ONLY NEEDS:** Webhook URL to be added in Shopify Admin Settings
+  - ⚠️ **ONLY NEEDS:** `SHOPIFY_WEBHOOK_SECRET` in `.env.local`
   - Updates: current_price, last_price_change_date, next_price_change_date
-  - Estimated: 30-45 min
+  - Verifies HMAC signature for security
 
-- [ ] **Automatic Scheduling** - Daily algorithm runs
-  - Option A: Vercel Cron (simple)
-  - Option B: Trigger.dev (robust, recommended)
-  - Estimated: 15-30 min
+- [x] **Automatic Scheduling** - ✅ ALREADY IMPLEMENTED with Trigger.dev
+  - File: `src/trigger/daily-pricing.ts`
+  - Schedule: Daily at 2 AM UTC (cron: "0 2 * * *")
+  - ⚠️ **ONLY NEEDS:** `TRIGGER_SECRET_KEY` in `.env.local`
+  - ⚠️ **ONLY NEEDS:** Run `npm run trigger:dev` for local testing
+  - ⚠️ **ONLY NEEDS:** Run `npm run trigger:deploy` for production
 
 - [ ] **Authentication System** - Supabase Auth
   - User login/logout
