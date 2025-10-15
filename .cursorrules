@@ -1,0 +1,296 @@
+# Shopify Smart Pricing - Feature-Based Architecture Rules
+# Based on "This Folder Structure Makes Me 100% More Productive" by Web Dev Simplified
+
+## 🎯 CORE PRINCIPLE: FEATURE-BASED ORGANIZATION
+All code must be organized by BUSINESS FEATURES, not technical categories. Each feature is self-contained with its own components, services, hooks, utils, and types.
+
+## 📁 MANDATORY FOLDER STRUCTURE
+
+### Root Structure
+```
+src/
+├── features/           # ALL business features go here
+├── shared/            # ONLY truly global code (used by 3+ features)
+├── app/               # Next.js app directory (pages, layouts, globals)
+└── lib/               # Global utilities and configurations
+```
+
+### Feature Structure (MANDATORY for every feature)
+```
+src/features/[feature-name]/
+├── components/        # Feature-specific components
+├── services/          # Feature-specific services
+├── hooks/             # Feature-specific hooks
+├── utils/             # Feature-specific utilities
+├── types/             # Feature-specific types
+└── index.ts           # Public API export (REQUIRED)
+```
+
+### Shared Structure (ONLY for truly global code)
+```
+src/shared/
+├── components/        # UI components used by 3+ features
+├── services/          # Global services (auth, API client)
+├── hooks/             # Global hooks (used everywhere)
+├── utils/             # Global utilities
+├── types/             # Global types
+└── lib/               # Global configurations
+```
+
+## 🚫 STRICT PROHIBITIONS
+
+### ❌ NEVER CREATE THESE FOLDERS
+- `src/components/` (use `src/shared/components/` or feature-specific)
+- `src/services/` (use `src/shared/services/` or feature-specific)
+- `src/hooks/` (use `src/shared/hooks/` or feature-specific)
+- `src/utils/` (use `src/shared/utils/` or feature-specific)
+- `src/types/` (use `src/shared/types/` or feature-specific)
+
+### ❌ NEVER PLACE BUSINESS LOGIC IN SHARED
+- No feature-specific business logic in `shared/`
+- No components that belong to one feature
+- No services that handle specific business rules
+- No types that are feature-specific
+
+## ✅ MANDATORY RULES
+
+### 1. Feature Creation Rules
+- **EVERY** new business feature MUST be created in `src/features/[feature-name]/`
+- **EVERY** feature MUST have the complete folder structure (components, services, hooks, utils, types, index.ts)
+- **EVERY** feature MUST export its public API through `index.ts`
+
+### 2. Import Rules (STRICT HIERARCHY)
+```
+App Layer → Features → Shared
+```
+
+#### ✅ ALLOWED IMPORTS
+- **Within Feature**: Direct imports between files in same feature
+- **Cross Feature**: Import ONLY from other features' `index.ts`
+- **From Shared**: Import from `shared/` from anywhere
+- **App Layer**: Import from features and shared
+
+#### ❌ FORBIDDEN IMPORTS
+- Direct imports to other features' internal files
+- Imports from `shared/` to feature-specific code
+- Circular dependencies between features
+
+### 3. Global Folder Rules
+- **ONLY** code used by 3+ features goes in `shared/`
+- **ONLY** technical utilities (no business logic)
+- **ONLY** truly generic and reusable code
+- **QUESTION** every addition to `shared/`
+
+### 4. File Naming Rules
+- **Components**: PascalCase (e.g., `PricingCard.tsx`)
+- **Services**: camelCase with Service suffix (e.g., `pricingService.ts`)
+- **Hooks**: camelCase with use prefix (e.g., `usePricing.ts`)
+- **Utils**: camelCase (e.g., `pricingCalculations.ts`)
+- **Types**: camelCase with .types.ts suffix (e.g., `pricing.types.ts`)
+
+### 5. Index File Rules
+- **EVERY** feature MUST have `index.ts`
+- **ONLY** export public API (components, hooks, services, types)
+- **NEVER** export internal implementation details
+- **USE** barrel exports for clean imports
+
+## 🎯 DECISION FRAMEWORK
+
+### When Creating New Code, Ask:
+1. **"Is this business logic?"** → Feature folder
+2. **"Is this used by 3+ features?"** → Shared folder
+3. **"Is this a technical utility?"** → Shared folder
+4. **"Does this belong to one business domain?"** → Feature folder
+
+### Feature vs Shared Decision Tree:
+```
+Is it business logic? 
+├── YES → Feature folder
+└── NO → Is it used by 3+ features?
+    ├── YES → Shared folder
+    └── NO → Feature folder
+```
+
+## 📋 MANDATORY CHECKLIST FOR EVERY CHANGE
+
+### Before Creating Any File:
+- [ ] Is this business logic? → Feature folder
+- [ ] Is this used by 3+ features? → Shared folder
+- [ ] Does the target folder exist?
+- [ ] Is the naming convention correct?
+
+### Before Moving Any File:
+- [ ] Does it belong to a specific feature? → Move to feature
+- [ ] Is it truly shared? → Move to shared
+- [ ] Update all import statements
+- [ ] Update feature's index.ts if needed
+
+### Before Adding to Shared:
+- [ ] Is it used by 3+ features?
+- [ ] Is it truly generic?
+- [ ] Does it have no business logic?
+- [ ] Is it really needed globally?
+
+## 🏗️ CURRENT PROJECT FEATURES
+
+### Existing Features (DO NOT MODIFY STRUCTURE):
+- `pricing-strategies/` - Pricing rules and strategies
+- `product-management/` - Product CRUD and management
+- `analytics-dashboard/` - Analytics and reporting
+- `shopify-integration/` - Shopify API integration
+- `user-settings/` - User preferences and configuration
+
+### Shared Components (ONLY):
+- UI components from shadcn/ui
+- Layout components (Header, Sidebar, Footer)
+- Common components (LoadingSpinner, ErrorBoundary)
+- Global services (API client, auth, storage)
+- Generic utilities and types
+
+## 🚨 ENFORCEMENT RULES
+
+### Code Review Checklist:
+- [ ] All new files are in correct folders
+- [ ] No prohibited folder structures
+- [ ] Import hierarchy is respected
+- [ ] Feature index.ts exports are updated
+- [ ] No business logic in shared/
+- [ ] Naming conventions are followed
+
+### Refactoring Rules:
+- [ ] Move business logic from shared/ to features/
+- [ ] Consolidate related code into features
+- [ ] Update imports after moving files
+- [ ] Maintain feature boundaries
+- [ ] Keep shared/ minimal and focused
+
+## 🎯 SUCCESS METRICS
+
+### Good Architecture Signs:
+- ✅ Features are self-contained
+- ✅ Shared/ is minimal and focused
+- ✅ No circular dependencies
+- ✅ Clear import hierarchy
+- ✅ Easy to find related code
+- ✅ Simple to add new features
+
+### Bad Architecture Signs:
+- ❌ Business logic in shared/
+- ❌ Components scattered across folders
+- ❌ Circular dependencies
+- ❌ Hard to find related code
+- ❌ Complex import paths
+- ❌ Shared/ folder growing large
+
+## 📚 REFERENCE
+
+This structure is based on the principles from "This Folder Structure Makes Me 100% More Productive" by Web Dev Simplified, emphasizing:
+- Feature-based organization over technical organization
+- Co-location of related code
+- Clear boundaries between features
+- Minimal global/shared code
+- Scalable and maintainable architecture
+
+## 🔧 IMPLEMENTATION NOTES
+
+- All new features MUST follow this structure
+- Existing code MUST be refactored to follow this structure
+- No exceptions to these rules without explicit approval
+- Regular architecture reviews to ensure compliance
+- Continuous refactoring to maintain structure integrity
+
+## 🔄 DATA FETCHING PATTERNS (MANDATORY)
+
+### React Query (TanStack Query) - REQUIRED for All Data Fetching
+
+**NEVER use useEffect for data fetching.** Always use React Query.
+
+### ✅ CORRECT Pattern:
+```typescript
+// src/features/[feature]/hooks/useData.ts
+import { useQuery } from '@tanstack/react-query';
+
+export function useData(filter?: Filter) {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['data', filter], // Include dependencies in key
+    queryFn: async () => {
+      const res = await fetch('/api/endpoint');
+      const response = await res.json();
+      if (!response.success) throw new Error(response.error);
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+  });
+
+  return { data: data || [], loading: isLoading, error, refetch };
+}
+```
+
+### ❌ WRONG Pattern (Never Do This):
+```typescript
+// NEVER use useState + useEffect for data fetching
+const [data, setData] = useState([]);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState(null);
+
+useEffect(() => {
+  fetch('/api/endpoint').then(res => setData(res));
+}, []);
+```
+
+### Mutations (For Updates/Creates/Deletes):
+```typescript
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+
+export function useUpdateData() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data) => {
+      const res = await fetch('/api/update', { 
+        method: 'POST',
+        body: JSON.stringify(data) 
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      // Automatically refetch data after update
+      queryClient.invalidateQueries({ queryKey: ['data'] });
+    },
+  });
+}
+
+// Usage in component:
+const updateData = useUpdateData();
+updateData.mutate({ id: 1, value: 'new' });
+```
+
+### Query Keys Convention:
+- **Simple:** `['products']`
+- **With ID:** `['product', productId]`
+- **With Filter:** `['products', filter]`
+- **Nested:** `['products', productId, 'variants']`
+
+### Cache Configuration:
+- **staleTime:** How long data is considered fresh (5 minutes default)
+- **gcTime:** How long unused data stays in cache (10 minutes default)
+- **refetchOnWindowFocus:** false (don't refetch on tab switch)
+
+### Provider Setup:
+- QueryProvider is in `src/shared/components/QueryProvider.tsx`
+- Wraps app in `src/app/layout.tsx`
+- Global configuration applied to all queries
+
+### Benefits:
+- ✅ Automatic caching (no duplicate fetches)
+- ✅ Automatic refetching (background updates)
+- ✅ No manual loading/error state management
+- ✅ Optimistic updates support
+- ✅ 70% less boilerplate code
+
+### When to Use:
+- **ALL server data fetching** (API calls, database queries)
+- **NOT for** local state, form state, or UI state
+
+
