@@ -148,7 +148,7 @@ async function syncSingleProduct(shopifyProduct: ShopifyProduct): Promise<void> 
         increment_percentage: 5.0,
         period_hours: 24,
         revenue_drop_threshold: 1.0,
-        wait_days_after_revert: 2,
+        wait_hours_after_revert: 24, // 1 day in hours (matches period_hours)
         max_increase_percentage: 100.0,
         current_state: 'increasing',
         next_price_change_date: nextChange.toISOString(),

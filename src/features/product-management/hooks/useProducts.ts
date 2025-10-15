@@ -1,7 +1,7 @@
-// Hook for managing products
+// Hook for managing products using React Query
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { ProductWithPricing, ProductFilter, ProductPricing } from '../types';
 import type { ShopifyProduct } from '@/features/shopify-integration';
 import { getShopifyClient } from '@/features/shopify-integration';
@@ -50,121 +50,114 @@ function addPricingToProduct(shopifyProduct: ShopifyProduct): ProductWithPricing
   };
 }
 
+// Fetch function for React Query
+async function fetchProductsFromAPI(): Promise<ShopifyProduct[]> {
+  // Fetch via server-side proxy to avoid CORS and hide token
+  const res = await fetch('/api/shopify/products', { cache: 'no-store' });
+  
+  if (!res.ok) {
+    throw new Error(`HTTP error! status: ${res.status}`);
+  }
+  
+  const response = await res.json();
+
+  if (!response.success || !response.data) {
+    console.error('Shopify API Error:', response?.error || {});
+    throw new Error(response?.error?.message || 'Failed to fetch products');
+  }
+
+  return response.data || [];
+}
+
 export function useProducts(filter?: ProductFilter) {
-  const [products, setProducts] = useState<ProductWithPricing[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Use React Query for data fetching with automatic caching
+  const { 
+    data: shopifyProducts = [], 
+    isLoading, 
+    error: queryError,
+    refetch 
+  } = useQuery({
+    queryKey: ['products'], // Cache key
+    queryFn: fetchProductsFromAPI,
+    staleTime: 5 * 60 * 1000, // Data stays fresh for 5 minutes
+    gcTime: 10 * 60 * 1000, // Cache persists for 10 minutes
+  });
 
-  const fetchProducts = useCallback(async () => {
+  // Transform Shopify products to ProductWithPricing with error handling
+  let productsWithPricing = shopifyProducts.map((product) => {
     try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch via server-side proxy to avoid CORS and hide token
-      const res = await fetch('/api/shopify/products', { cache: 'no-store' });
-      
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      
-      const response: any = await res.json();
-
-      if (!response.success || !response.data) {
-        console.error('Shopify API Error:', response?.error || {});
-        throw new Error(response?.error?.message || 'Failed to fetch products');
-      }
-
-      // Extract products from proxied Shopify response (already transformed)
-      const shopifyProducts = (response.data || []) as ShopifyProduct[];
-
-      // Transform Shopify products to ProductWithPricing with error handling
-      const productsWithPricing = shopifyProducts.map((product) => {
-        try {
-          return addPricingToProduct(product);
-        } catch (error) {
-          console.error(`Error processing product ${product.id}:`, error);
-          // Return a fallback product with safe defaults
-          return {
-            ...product,
-            pricing: {
-              basePrice: 0,
-              cost: 0,
-              maxPrice: 0,
-              currentPrice: 0,
-              profitMargin: 0,
-              lastUpdated: new Date(),
-            },
-          };
-        }
-      });
-      
-      let filtered = [...productsWithPricing];
-
-      // Apply filters
-      if (filter?.search) {
-        const searchLower = filter.search.toLowerCase();
-        filtered = filtered.filter(p =>
-          p.title.toLowerCase().includes(searchLower) ||
-          p.description.toLowerCase().includes(searchLower)
-        );
-      }
-
-      if (filter?.tags && filter.tags.length > 0) {
-        filtered = filtered.filter(p =>
-          filter.tags!.some(tag => p.tags.includes(tag))
-        );
-      }
-
-      if (filter?.status) {
-        filtered = filtered.filter(p => p.status === filter.status);
-      }
-
-      // Apply sorting
-      if (filter?.sortBy) {
-        filtered.sort((a, b) => {
-          let aVal, bVal;
-          switch (filter.sortBy) {
-            case 'title':
-              aVal = a.title;
-              bVal = b.title;
-              break;
-            case 'price':
-              aVal = a.pricing.currentPrice;
-              bVal = b.pricing.currentPrice;
-              break;
-            case 'updated':
-              aVal = new Date(a.updatedAt).getTime();
-              bVal = new Date(b.updatedAt).getTime();
-              break;
-            default:
-              aVal = a.title;
-              bVal = b.title;
-          }
-
-          if (filter.sortDirection === 'desc') {
-            return aVal > bVal ? -1 : 1;
-          }
-          return aVal < bVal ? -1 : 1;
-        });
-      }
-
-      setProducts(filtered);
-      setLoading(false);
-    } catch (err) {
-      console.error('Error fetching products:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch products');
-      setLoading(false);
+      return addPricingToProduct(product);
+    } catch (error) {
+      console.error(`Error processing product ${product.id}:`, error);
+      // Return a fallback product with safe defaults
+      return {
+        ...product,
+        pricing: {
+          basePrice: 0,
+          cost: 0,
+          maxPrice: 0,
+          currentPrice: 0,
+          profitMargin: 0,
+          lastUpdated: new Date(),
+        },
+      };
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter?.search, filter?.tags, filter?.status, filter?.sortBy, filter?.sortDirection]);
+  });
+  
+  // Apply filters (client-side filtering for instant results)
+  let filtered = [...productsWithPricing];
 
-  useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+  if (filter?.search) {
+    const searchLower = filter.search.toLowerCase();
+    filtered = filtered.filter(p =>
+      p.title.toLowerCase().includes(searchLower) ||
+      p.description.toLowerCase().includes(searchLower)
+    );
+  }
 
-  const refetch = useCallback(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+  if (filter?.tags && filter.tags.length > 0) {
+    filtered = filtered.filter(p =>
+      filter.tags!.some(tag => p.tags.includes(tag))
+    );
+  }
 
-  return { products, loading, error, refetch };
+  if (filter?.status) {
+    filtered = filtered.filter(p => p.status === filter.status);
+  }
+
+  // Apply sorting
+  if (filter?.sortBy) {
+    filtered.sort((a, b) => {
+      let aVal, bVal;
+      switch (filter.sortBy) {
+        case 'title':
+          aVal = a.title;
+          bVal = b.title;
+          break;
+        case 'price':
+          aVal = a.pricing.currentPrice;
+          bVal = b.pricing.currentPrice;
+          break;
+        case 'updated':
+          aVal = new Date(a.updatedAt).getTime();
+          bVal = new Date(b.updatedAt).getTime();
+          break;
+        default:
+          aVal = a.title;
+          bVal = b.title;
+      }
+
+      if (filter.sortDirection === 'desc') {
+        return aVal > bVal ? -1 : 1;
+      }
+      return aVal < bVal ? -1 : 1;
+    });
+  }
+
+  return { 
+    products: filtered, 
+    loading: isLoading, 
+    error: queryError ? (queryError as Error).message : null, 
+    refetch 
+  };
 }

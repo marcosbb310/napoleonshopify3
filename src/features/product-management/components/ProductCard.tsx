@@ -1,4 +1,9 @@
 // Product card component for grid view
+// 
+// ⚠️ OPTION 2 LAYOUT ACTIVE - Minimal Card (Easy to Undo)
+// To revert to the original detailed layout, search for "OPTION 2" comments
+// and uncomment the sections while removing the new "Current Price - Now Prominent" section
+//
 'use client';
 
 import { useState } from 'react';
@@ -25,6 +30,7 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
+import { useSmartPricingToggle, SmartPricingConfirmDialog, SmartPricingResumeModal } from '@/features/pricing-engine';
 import type { ProductWithPricing } from '../types';
 
 interface ProductCardProps {
@@ -39,7 +45,8 @@ interface ProductCardProps {
   onShowVariants?: (productId: string) => void;
   isShowingVariants?: boolean;
   smartPricingEnabled?: boolean;
-  onSmartPricingToggle?: (enabled: boolean) => void;
+  onSmartPricingToggle?: (enabled: boolean, newPrice?: number) => void;
+  onViewAnalytics?: (productId: string) => void;
 }
 
 export function ProductCard({ 
@@ -53,7 +60,8 @@ export function ProductCard({
   onShowVariants, 
   isShowingVariants,
   smartPricingEnabled = true,
-  onSmartPricingToggle
+  onSmartPricingToggle,
+  onViewAnalytics
 }: ProductCardProps) {
   const [editingField, setEditingField] = useState<'basePrice' | 'cost' | 'maxPrice' | 'currentPrice' | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -62,6 +70,23 @@ export function ProductCard({
   const [selectedVariantId, setSelectedVariantId] = useState<string>(product.variants[0]?.id || '');
   const [selectedOption1, setSelectedOption1] = useState<string>('');
   const [showVariants, setShowVariants] = useState(false);
+  
+  // Use smart pricing toggle hook
+  const {
+    isLoading: isTogglingSmartPricing,
+    showConfirm,
+    setShowConfirm,
+    showResumeModal,
+    setShowResumeModal,
+    pendingAction,
+    priceOptions,
+    handleToggle,
+    handleConfirmToggle,
+    handleResumeConfirm,
+  } = useSmartPricingToggle({
+    productId: product.id,
+    productName: product.title,
+  });
   
   const profitChange = product.pricing.currentPrice - product.pricing.basePrice;
   const profitChangePercent = ((profitChange / product.pricing.basePrice) * 100).toFixed(1);
@@ -251,7 +276,8 @@ export function ProductCard({
         </div>
       </div>
 
-      <div className="absolute right-3 top-3 z-20 flex gap-2">
+      {/* OPTION 2: REMOVED - Price History button (redundant with View Analytics) */}
+      {/* <div className="absolute right-3 top-3 z-20 flex gap-2">
         <Button
           size="icon"
           variant="ghost"
@@ -264,7 +290,7 @@ export function ProductCard({
         >
           <ChartLine className="h-4 w-4" />
         </Button>
-      </div>
+      </div> */}
 
       <div className="flex-1 flex flex-col">
         <div className="relative aspect-[5/3] overflow-hidden bg-gradient-to-br from-muted to-muted/50 z-0">
@@ -284,10 +310,10 @@ export function ProductCard({
           <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
 
-        <CardContent className="p-4 flex-1 flex flex-col">
-          <div className="space-y-3 flex-1 flex flex-col">
+        <CardContent className="p-3 flex-1 flex flex-col">
+          <div className="space-y-2 flex-1 flex flex-col">
             {/* Title & Vendor */}
-            <div className="min-h-[42px]">
+            <div>
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-sm truncate mb-0.5 leading-tight">{product.title}</h3>
@@ -295,7 +321,8 @@ export function ProductCard({
                     {product.vendor}
                   </p>
                 </div>
-                {product.variants.length > 1 && (
+                {/* OPTION 2: REMOVED - Variants link (moved to analytics modal) */}
+                {/* {product.variants.length > 1 && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -305,10 +332,10 @@ export function ProductCard({
                   >
                     {product.variants.length} variants
                   </button>
-                )}
+                )} */}
               </div>
-              {/* Algorithm Status Badge */}
-              <div className="mt-2 flex items-center gap-2">
+              {/* OPTION 2: REMOVED - Algorithm Status Badge & Update Timestamp */}
+              {/* <div className="mt-1.5 flex items-center gap-2">
                 <Badge 
                   variant="outline" 
                   className={`text-xs font-normal ${algorithmStatus.color} ${algorithmStatus.bgColor} ${algorithmStatus.borderColor}`}
@@ -319,23 +346,23 @@ export function ProductCard({
                 <span className="text-xs text-muted-foreground/70">
                   Updated 2h ago
                 </span>
-              </div>
+              </div> */}
             </div>
 
-            {/* Last Price Change Badge */}
-            <div className="flex items-center justify-between bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-2.5 border border-primary/20">
+            {/* OPTION 2: REMOVED - Last Price Change Badge (moved to analytics modal) */}
+            {/* <div className="flex items-center justify-between bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-2 border border-primary/20">
               <div>
                 <div className="text-xs text-muted-foreground mb-0.5">Last Change</div>
-                <div className="text-xl font-bold tracking-tight text-primary">
+                <div className="text-lg font-bold tracking-tight text-primary">
                   ${product.pricing.basePrice.toFixed(2)} → ${variantPricing.currentPrice.toFixed(2)}
                 </div>
               </div>
               <div className="text-right">
-                <div className={`flex items-center gap-1 text-lg font-bold ${profitChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`flex items-center gap-1 text-base font-bold ${profitChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {profitChange >= 0 ? (
-                    <TrendingUp className="h-4 w-4" />
+                    <TrendingUp className="h-3.5 w-3.5" />
                   ) : (
-                    <TrendingDown className="h-4 w-4" />
+                    <TrendingDown className="h-3.5 w-3.5" />
                   )}
                   <span>{parseFloat(profitChangePercent) >= 0 ? '+' : ''}{profitChangePercent}%</span>
                 </div>
@@ -343,13 +370,12 @@ export function ProductCard({
                   {product.pricing.profitMargin.toFixed(1)}% margin
                 </div>
               </div>
-            </div>
+            </div> */}
 
-            {/* Variant Selector - Fixed height for alignment */}
-            <div className="min-h-[32px]">
+            {/* OPTION 2: REMOVED - Variant Selector (moved to analytics modal) */}
+            {/* <div className="min-h-[32px]">
               {variantOptions && variantOptions.option1.length > 0 && (
                 <div className="space-y-2">
-                  {/* Clickable Variant Toggle */}
                   <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -367,10 +393,8 @@ export function ProductCard({
                   )}
                 </button>
                 
-                {/* Expandable Variant Options */}
                 {showVariants && (
                   <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
-                    {/* Option 1 (e.g., Color) */}
                     <div className="flex flex-wrap gap-1.5">
                       {variantOptions.option1.map((option) => {
                         const isSelected = selectedOption1 === option;
@@ -381,7 +405,6 @@ export function ProductCard({
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedOption1(option);
-                              // Find and select the first variant with this option1
                               const variant = product.variants.find(v => v.title.startsWith(option));
                               if (variant) setSelectedVariantId(variant.id);
                             }}
@@ -397,7 +420,6 @@ export function ProductCard({
                       })}
                     </div>
                     
-                    {/* Option 2 (e.g., Size) - shows when option1 is selected */}
                     {selectedOption1 && variantOptions.option2.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {getAvailableOption2(selectedOption1).map((option) => {
@@ -429,12 +451,21 @@ export function ProductCard({
                 )}
                 </div>
               )}
+            </div> */}
+
+            {/* OPTION 2: Current Price - Now Prominent and Centered */}
+            <div className="flex items-center justify-center py-4">
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-1">Current Price</div>
+                <div className="text-3xl font-bold text-primary">
+                  ${variantPricing.currentPrice.toFixed(2)}
+                </div>
+              </div>
             </div>
 
-            {/* Pricing Controls */}
-            <div className="space-y-1.5 border-t pt-2">
-              {/* Base Price */}
-              <div className="flex items-center justify-between py-1 px-2 rounded-md hover:bg-muted/50 transition-colors">
+            {/* OPTION 2: REMOVED - Base Price (moved to analytics modal settings) */}
+            {/* <div className="space-y-1 border-t pt-1.5">
+              <div className="flex items-center justify-between py-0.5 px-2 rounded-md hover:bg-muted/50 transition-colors">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Base</span>
                 {editingField === 'basePrice' ? (
                   <div className="flex items-center gap-0.5">
@@ -465,8 +496,7 @@ export function ProductCard({
                 )}
               </div>
 
-              {/* Current Price */}
-              <div className="flex items-center justify-between py-1 px-2 rounded-md hover:bg-muted/50 transition-colors">
+              <div className="flex items-center justify-between py-0.5 px-2 rounded-md hover:bg-muted/50 transition-colors">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current</span>
                 {editingField === 'currentPrice' ? (
                   <div className="flex items-center gap-0.5">
@@ -496,48 +526,17 @@ export function ProductCard({
                   </button>
                 )}
               </div>
+            </div> */}
 
-              {/* Max Price */}
-              <div className="flex items-center justify-between py-1 px-2 rounded-md hover:bg-muted/50 transition-colors">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Max</span>
-                {editingField === 'maxPrice' ? (
-                  <div className="flex items-center gap-0.5">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-7 w-20 text-sm font-semibold"
-                      autoFocus
-                    />
-                    <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-primary hover:text-white transition-all duration-200" onClick={handleSaveEdit}>
-                      <Check className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-destructive hover:text-white transition-all duration-200" onClick={handleCancelEdit}>
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={(e) => handleStartEdit('maxPrice', variantPricing.maxPrice, e)}
-                    className="text-sm font-bold text-foreground hover:text-white hover:bg-primary transition-all duration-200 cursor-pointer px-2.5 py-1 rounded-md"
-                  >
-                    ${variantPricing.maxPrice.toFixed(2)}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Smart Pricing Toggle - Full Width Button at Bottom */}
-            <div className="mt-auto pt-3">
+            {/* Smart Pricing Toggle & Analytics - Full Width Buttons at Bottom */}
+            <div className="mt-auto pt-2 space-y-1.5">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSmartPricingToggle?.(!smartPricingEnabled);
+                  handleToggle(smartPricingEnabled);
                 }}
-                className={`w-full px-4 py-3 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold ${
+                disabled={isTogglingSmartPricing}
+                className={`w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed ${
                   smartPricingEnabled 
                     ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm' 
                     : 'bg-muted hover:bg-muted/80 text-muted-foreground'
@@ -545,9 +544,24 @@ export function ProductCard({
               >
                 <Zap className={`h-4 w-4 ${smartPricingEnabled ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
                 <span className="text-sm">
-                  {smartPricingEnabled ? 'Smart Pricing Active' : 'Smart Pricing Off'}
+                  {isTogglingSmartPricing 
+                    ? 'Updating...' 
+                    : smartPricingEnabled ? 'Smart Pricing Active' : 'Smart Pricing Off'}
                 </span>
               </button>
+              
+              {/* Analytics Button */}
+              {onViewAnalytics && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewAnalytics(product.id);
+                  }}
+                  className="w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+                >
+                  <span className="text-sm">📊 View Analytics</span>
+                </button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -657,6 +671,39 @@ export function ProductCard({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Smart Pricing Confirmation Dialog - Only for disable */}
+      <SmartPricingConfirmDialog
+        open={showConfirm && pendingAction === 'disable'}
+        onOpenChange={setShowConfirm}
+        onConfirm={async () => {
+          const result = await handleConfirmToggle();
+          // Update parent state with new price immediately for smooth UX
+          if (result?.revertedTo !== undefined) {
+            onSmartPricingToggle?.(false, result.revertedTo);
+          }
+        }}
+        type="disable"
+        productName={product.title}
+      />
+
+      {/* Smart Pricing Resume Modal */}
+      <SmartPricingResumeModal
+        open={showResumeModal}
+        onOpenChange={setShowResumeModal}
+        onConfirm={async (option) => {
+          const result = await handleResumeConfirm(option);
+          // Update parent state with new price immediately for smooth UX
+          if (result?.price !== undefined) {
+            onSmartPricingToggle?.(true, result.price);
+          } else {
+            onSmartPricingToggle?.(true);
+          }
+        }}
+        productCount={1}
+        basePrice={priceOptions?.base || 0}
+        lastSmartPrice={priceOptions?.last || 0}
+      />
     </Card>
   );
 }

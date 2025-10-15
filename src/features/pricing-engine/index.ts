@@ -6,6 +6,14 @@
 export { SmartPricingProvider, useSmartPricing } from './hooks/useSmartPricing';
 export { useUndoState } from './hooks/useUndoState';
 export { useSmartPricingToggle } from './hooks/useSmartPricingToggle';
+export { 
+  useGlobalDisable, 
+  useGlobalResume, 
+  useCreateProduct,
+  useUpdatePricingConfig,
+  useResumeProduct,
+  useUndo 
+} from './hooks/useSmartPricingMutations';
 export { SmartPricingResumeModal } from './components/SmartPricingResumeModal';
 export { SmartPricingConfirmDialog } from './components/SmartPricingConfirmDialog';
 export { UndoButton } from './components/UndoButton';

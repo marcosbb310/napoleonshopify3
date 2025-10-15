@@ -13654,7 +13654,7 @@ async function revertPrice(product, config, stats, revenue) {
   const previousPrice = history?.old_price || product.starting_price;
   await updatePrice(product, config, previousPrice, "revert", `Revenue dropped ${revenue.changePercent.toFixed(1)}%`, revenue);
   const waitUntil = /* @__PURE__ */ new Date();
-  waitUntil.setDate(waitUntil.getDate() + config.wait_days_after_revert);
+  waitUntil.setHours(waitUntil.getHours() + config.wait_hours_after_revert);
   await supabaseAdmin.from("pricing_config").update({
     current_state: "waiting_after_revert",
     revert_wait_until_date: waitUntil.toISOString(),
@@ -13743,4 +13743,4 @@ var dailyPricingTask = schedules_exports.task({
 export {
   dailyPricingTask
 };
-//# sourceMappingURL=chunk-U4PQ3WNQ.mjs.map
+//# sourceMappingURL=chunk-ZFG7ZCMW.mjs.map

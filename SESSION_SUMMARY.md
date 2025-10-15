@@ -36,7 +36,7 @@
 - `increment_percentage`: 5%
 - `period_days`: 2 days
 - `revenue_drop_threshold`: 1%
-- `wait_days_after_revert`: 2 days
+- `wait_hours_after_revert`: 24 hours (matches period_hours)
 - `max_increase_percentage`: 100%
 - `next_price_change_date`: Tracks when each product changes next
 

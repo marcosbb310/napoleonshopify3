@@ -1,5 +1,5 @@
 {
-  "contentHash": "b668654ecd45113dda5d27bd13609783",
+  "contentHash": "1a3ec438ea00a979bab026f991f359a6",
   "runtime": "node",
   "environment": "dev",
   "packageVersion": "4.0.4",
@@ -8,11 +8,11 @@
   "files": [
     {
       "entry": "src/trigger/daily-pricing.ts",
-      "out": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-F4LD5a/Desktop/code/napoleonshopify3/napoleonshopify3/src/trigger/daily-pricing.mjs"
+      "out": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-KhY4wg/Desktop/code/napoleonshopify3/napoleonshopify3/src/trigger/daily-pricing.mjs"
     },
     {
       "entry": "src/trigger/index.ts",
-      "out": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-F4LD5a/Desktop/code/napoleonshopify3/napoleonshopify3/src/trigger/index.mjs"
+      "out": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-KhY4wg/Desktop/code/napoleonshopify3/napoleonshopify3/src/trigger/index.mjs"
     }
   ],
   "sources": {
@@ -49,10 +49,10 @@
       "./src/trigger"
     ]
   },
-  "outputPath": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-F4LD5a",
-  "indexWorkerEntryPoint": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-F4LD5a/.npm/_npx/f51a09bd0abf5f10/node_modules/trigger.dev/dist/esm/entryPoints/dev-index-worker.mjs",
-  "runWorkerEntryPoint": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-F4LD5a/.npm/_npx/f51a09bd0abf5f10/node_modules/trigger.dev/dist/esm/entryPoints/dev-run-worker.mjs",
-  "configPath": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-F4LD5a/Desktop/code/napoleonshopify3/napoleonshopify3/trigger.config.mjs",
+  "outputPath": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-KhY4wg",
+  "indexWorkerEntryPoint": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-KhY4wg/.npm/_npx/f51a09bd0abf5f10/node_modules/trigger.dev/dist/esm/entryPoints/dev-index-worker.mjs",
+  "runWorkerEntryPoint": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-KhY4wg/.npm/_npx/f51a09bd0abf5f10/node_modules/trigger.dev/dist/esm/entryPoints/dev-run-worker.mjs",
+  "configPath": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-KhY4wg/Desktop/code/napoleonshopify3/napoleonshopify3/trigger.config.mjs",
   "customConditions": [],
   "deploy": {
     "env": {}

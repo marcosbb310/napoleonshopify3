@@ -21,12 +21,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get product and config
-    const { data: product, error: productError } = await supabaseAdmin
+    // Try to find product by UUID first, then by Shopify ID
+    let product: any = null;
+    let productError: any = null;
+    
+    // First try as UUID
+    const uuidResult = await supabaseAdmin
       .from('products')
       .select('*, pricing_config(*)')
       .eq('id', productId)
       .single();
+    
+    if (!uuidResult.error && uuidResult.data) {
+      product = uuidResult.data;
+    } else {
+      // Try as Shopify ID
+      const shopifyResult = await supabaseAdmin
+        .from('products')
+        .select('*, pricing_config(*)')
+        .eq('shopify_id', productId)
+        .single();
+      
+      if (!shopifyResult.error && shopifyResult.data) {
+        product = shopifyResult.data;
+      } else {
+        productError = shopifyResult.error;
+      }
+    }
 
     if (productError || !product) {
       return NextResponse.json(
@@ -45,18 +66,14 @@ export async function POST(request: NextRequest) {
       : config.last_smart_pricing_price || product.current_price;
 
     // Update pricing config
-    const nextChange = new Date();
-    nextChange.setHours(nextChange.getHours() + config.period_hours);
-
     await supabaseAdmin
       .from('pricing_config')
       .update({
         auto_pricing_enabled: true,
         current_state: 'increasing',
-        next_price_change_date: nextChange.toISOString(),
         revert_wait_until_date: null,
       })
-      .eq('product_id', productId);
+      .eq('product_id', product.id);
 
     // Update product price
     await supabaseAdmin

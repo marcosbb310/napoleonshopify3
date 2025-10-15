@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const { data, error } = await supabaseAdmin
       .from('pricing_config')
-      .select('product_id, revenue_drop_threshold, wait_days_after_revert, current_state, last_price_change_date, next_price_change_date');
+      .select('product_id, revenue_drop_threshold, wait_hours_after_revert, current_state, last_price_change_date, next_price_change_date');
 
     if (error) {
       return NextResponse.json(

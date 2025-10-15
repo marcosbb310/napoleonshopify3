@@ -46,7 +46,8 @@ export interface PricingStrategy {
 export interface ProductSnapshot {
   productId: string;
   shopifyId: string;
-  price: number;
+  price: number; // Old price (for undo)
+  newPrice?: number; // New price (for UI update) - optional for backward compatibility
   auto_pricing_enabled: boolean;
   current_state?: string;
   next_price_change_date?: string | null;

@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { UndoState, ProductSnapshot, UndoActionType } from '../types';
+import { useUndo } from './useSmartPricingMutations';
 
 const UNDO_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 const UNDO_STORAGE_KEY = 'smart_pricing_undo_state';
@@ -10,6 +11,9 @@ const UNDO_STORAGE_KEY = 'smart_pricing_undo_state';
 export function useUndoState() {
   const [undoState, setUndoState] = useState<UndoState | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  
+  // React Query mutation
+  const undoMutation = useUndo();
 
   // Load undo state from localStorage on mount
   useEffect(() => {
@@ -93,15 +97,9 @@ export function useUndoState() {
     if (!undoState) return { success: false, error: 'No undo state' };
 
     try {
-      const response = await fetch('/api/pricing/undo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productSnapshots: undoState.productSnapshots,
-        }),
+      const data = await undoMutation.mutateAsync({
+        productSnapshots: undoState.productSnapshots,
       });
-
-      const data = await response.json();
 
       if (data.success) {
         clearUndo();
@@ -114,7 +112,7 @@ export function useUndoState() {
         error: error instanceof Error ? error.message : 'Failed to undo',
       };
     }
-  }, [undoState, clearUndo]);
+  }, [undoState, clearUndo, undoMutation]);
 
   const canUndo = undoState !== null && timeRemaining > 0;
 

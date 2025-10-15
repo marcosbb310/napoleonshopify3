@@ -1,0 +1,32 @@
+{
+  "configPath": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-KhY4wg/Desktop/code/napoleonshopify3/napoleonshopify3/trigger.config.mjs",
+  "tasks": [
+    {
+      "id": "daily-pricing-optimization",
+      "retry": {
+        "maxAttempts": 3,
+        "factor": 2,
+        "minTimeoutInMs": 1000,
+        "maxTimeoutInMs": 10000,
+        "randomize": true
+      },
+      "triggerSource": "schedule",
+      "schedule": {
+        "cron": "0 2 * * *",
+        "timezone": "UTC"
+      },
+      "maxDuration": 3600,
+      "filePath": "src/trigger/daily-pricing.ts",
+      "entryPoint": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-KhY4wg/Desktop/code/napoleonshopify3/napoleonshopify3/src/trigger/daily-pricing.mjs"
+    }
+  ],
+  "queues": [],
+  "workerEntryPoint": "/Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/.trigger/tmp/build-KhY4wg/.npm/_npx/f51a09bd0abf5f10/node_modules/trigger.dev/dist/esm/entryPoints/dev-run-worker.mjs",
+  "runtime": "node",
+  "runtimeVersion": "24.7.0",
+  "customConditions": [],
+  "timings": {
+    "src/trigger/daily-pricing.ts": 35.549207999999965,
+    "src/trigger/index.ts": 0.9095000000000368
+  }
+}

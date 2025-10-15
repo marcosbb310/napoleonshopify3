@@ -48,21 +48,18 @@ export async function POST(request: NextRequest) {
       snapshots.push({
         productId: product.id,
         shopifyId: product.shopify_id,
-        price: product.current_price,
+        price: product.current_price, // Old price (for undo)
+        newPrice: newPrice, // New price (for UI update)
         auto_pricing_enabled: false,
         current_state: config.current_state,
       });
 
       // Update pricing config
-      const nextChange = new Date();
-      nextChange.setHours(nextChange.getHours() + (config.period_hours || 24));
-
       await supabaseAdmin
         .from('pricing_config')
         .update({
           auto_pricing_enabled: true,
           current_state: 'increasing',
-          next_price_change_date: nextChange.toISOString(),
           revert_wait_until_date: null,
         })
         .eq('product_id', product.id);

@@ -5,10 +5,10 @@ import { supabaseAdmin } from '@/shared/lib/supabase';
 // GET pricing config for a product
 export async function GET(
   request: NextRequest,
-  { params }: { params: { productId: string } }
+  { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
-    const { productId } = params;
+    const { productId } = await params;
 
     const { data, error } = await supabaseAdmin
       .from('pricing_config')
@@ -36,10 +36,10 @@ export async function GET(
 // PATCH pricing config for a product
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { productId: string } }
+  { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
-    const { productId } = params;
+    const { productId } = await params;
     const body = await request.json();
 
     // Check if this is a smart pricing toggle
@@ -52,7 +52,7 @@ export async function PATCH(
       'increment_percentage',
       'period_hours',
       'revenue_drop_threshold',
-      'wait_days_after_revert',
+      'wait_hours_after_revert',
       'max_increase_percentage',
     ];
 
@@ -101,12 +101,33 @@ export async function PATCH(
 // Handle smart pricing toggle logic
 async function handleSmartPricingToggle(productId: string, enabled: boolean) {
   try {
-    // Get current product and config
-    const { data: product, error: productError } = await supabaseAdmin
+    // Try to find product by UUID first, then by Shopify ID
+    let product: any = null;
+    let productError: any = null;
+    
+    // First try as UUID
+    const uuidResult = await supabaseAdmin
       .from('products')
       .select('*, pricing_config(*)')
       .eq('id', productId)
       .single();
+    
+    if (!uuidResult.error && uuidResult.data) {
+      product = uuidResult.data;
+    } else {
+      // Try as Shopify ID
+      const shopifyResult = await supabaseAdmin
+        .from('products')
+        .select('*, pricing_config(*)')
+        .eq('shopify_id', productId)
+        .single();
+      
+      if (!shopifyResult.error && shopifyResult.data) {
+        product = shopifyResult.data;
+      } else {
+        productError = shopifyResult.error;
+      }
+    }
 
     if (productError || !product) {
       return NextResponse.json(
@@ -152,7 +173,6 @@ async function handleSmartPricingToggle(productId: string, enabled: boolean) {
           last_smart_pricing_price: product.current_price,
           auto_pricing_enabled: false,
           current_state: 'increasing',
-          next_price_change_date: null,
           revert_wait_until_date: null,
         })
         .eq('product_id', productId);
@@ -175,7 +195,6 @@ async function handleSmartPricingToggle(productId: string, enabled: boolean) {
           price: product.current_price,
           auto_pricing_enabled: true,
           state: config.current_state,
-          next_price_change_date: config.next_price_change_date,
           revert_wait_until_date: config.revert_wait_until_date,
         },
       });
@@ -234,10 +253,10 @@ async function updateShopifyPrice(shopifyId: string, newPrice: number) {
 // POST to approve max cap increase
 export async function POST(
   request: NextRequest,
-  { params }: { params: { productId: string } }
+  { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
-    const { productId } = params;
+    const { productId } = await params;
     const body = await request.json();
     const { newMaxPercentage } = body;
 

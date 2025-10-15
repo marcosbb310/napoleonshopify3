@@ -1,9 +1,10 @@
 // Hook for individual product smart pricing toggles
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { ResumeOption, ProductSnapshot } from '../types';
+import { useUpdatePricingConfig, useResumeProduct } from './useSmartPricingMutations';
 
 interface UseSmartPricingToggleProps {
   productId: string;
@@ -12,114 +13,108 @@ interface UseSmartPricingToggleProps {
 }
 
 export function useSmartPricingToggle({ productId, productName, onUndoSet }: UseSmartPricingToggleProps) {
-  const [isLoading, setIsLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<'enable' | 'disable' | null>(null);
   const [priceOptions, setPriceOptions] = useState<{ base: number; last: number } | null>(null);
 
-  const handleToggle = (currentEnabled: boolean) => {
+  // React Query mutations
+  const updateConfigMutation = useUpdatePricingConfig();
+  const resumeProductMutation = useResumeProduct();
+  
+  // Loading state from mutations - memoized to prevent infinite re-renders
+  const isLoading = useMemo(
+    () => updateConfigMutation.isPending || resumeProductMutation.isPending,
+    [updateConfigMutation.isPending, resumeProductMutation.isPending]
+  );
+
+  const handleToggle = async (currentEnabled: boolean) => {
     if (currentEnabled) {
-      // Turning OFF
+      // Turning OFF - show confirmation
       setPendingAction('disable');
       setShowConfirm(true);
     } else {
-      // Turning ON
+      // Turning ON - skip confirmation, go directly to resume modal
       setPendingAction('enable');
-      setShowConfirm(true);
+      
+      try {
+        const data = await updateConfigMutation.mutateAsync({
+          productId,
+          auto_pricing_enabled: true,
+        });
+
+        if (data.showModal) {
+          // Show resume modal directly
+          setPriceOptions({
+            base: data.preSmart!,
+            last: data.lastSmart!,
+          });
+          setShowResumeModal(true);
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to enable smart pricing');
+        console.error('Smart pricing toggle error:', error);
+      }
     }
   };
 
   const handleConfirmToggle = async () => {
     if (!pendingAction) return;
 
-    setIsLoading(true);
     setShowConfirm(false);
 
     try {
+      // Only handle disable here since enable goes directly to resume modal
       if (pendingAction === 'disable') {
-        // Call API to disable
-        const response = await fetch(`/api/pricing/config/${productId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ auto_pricing_enabled: false }),
+        const data = await updateConfigMutation.mutateAsync({
+          productId,
+          auto_pricing_enabled: false,
         });
 
-        const data = await response.json();
-
-        if (data.success && data.reverted) {
+        if (data.reverted) {
           toast.success(`Smart pricing disabled for ${productName}`, {
-            description: `Price reverted to $${data.revertedTo.toFixed(2)}`,
+            description: `Price reverted to $${data.revertedTo!.toFixed(2)}`,
           });
 
           // Set undo state
           if (onUndoSet && data.snapshot) {
             onUndoSet('individual-off', [data.snapshot], productName);
           }
-        } else {
-          toast.error('Failed to disable smart pricing');
-        }
-      } else {
-        // Enable - get price options first
-        const response = await fetch(`/api/pricing/config/${productId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ auto_pricing_enabled: true }),
-        });
-
-        const data = await response.json();
-
-        if (data.success && data.showModal) {
-          // Show resume modal
-          setPriceOptions({
-            base: data.preSmart,
-            last: data.lastSmart,
-          });
-          setShowResumeModal(true);
-        } else {
-          toast.error('Failed to enable smart pricing');
+          
+          return data; // Return data for parent to handle
         }
       }
     } catch (error) {
-      toast.error('An error occurred');
-      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'An error occurred');
+      console.error('Smart pricing toggle error:', error);
     } finally {
-      setIsLoading(false);
       setPendingAction(null);
     }
   };
 
   const handleResumeConfirm = async (option: ResumeOption) => {
-    setIsLoading(true);
     setShowResumeModal(false);
 
     try {
-      const response = await fetch('/api/pricing/resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, resumeOption: option }),
+      const data = await resumeProductMutation.mutateAsync({
+        productId,
+        resumeOption: option,
       });
 
-      const data = await response.json();
+      const optionText = option === 'base' ? 'base price' : 'last smart price';
+      toast.success(`Smart pricing enabled for ${productName}`, {
+        description: `Starting at $${data.price.toFixed(2)} (${optionText})`,
+      });
 
-      if (data.success) {
-        const optionText = option === 'base' ? 'base price' : 'last smart price';
-        toast.success(`Smart pricing enabled for ${productName}`, {
-          description: `Starting at $${data.price.toFixed(2)} (${optionText})`,
-        });
-
-        // Set undo state
-        if (onUndoSet && data.snapshot) {
-          onUndoSet('individual-on', [data.snapshot], productName);
-        }
-      } else {
-        toast.error('Failed to enable smart pricing');
+      // Set undo state
+      if (onUndoSet && data.snapshot) {
+        onUndoSet('individual-on', [data.snapshot], productName);
       }
+      
+      return data; // Return data for parent to handle
     } catch (error) {
-      toast.error('An error occurred');
-      console.error(error);
-    } finally {
-      setIsLoading(false);
+      toast.error(error instanceof Error ? error.message : 'An error occurred');
+      console.error('Smart pricing resume error:', error);
     }
   };
 

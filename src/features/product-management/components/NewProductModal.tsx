@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useCreateProduct } from '@/features/pricing-engine';
 import { Button } from '@/shared/components/ui/button';
 import {
   Dialog,
@@ -41,7 +42,7 @@ interface NewProductModalProps {
 
 export function NewProductModal({ onProductCreated }: NewProductModalProps) {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const createProductMutation = useCreateProduct();
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -70,44 +71,29 @@ export function NewProductModal({ onProductCreated }: NewProductModalProps) {
       toast.error('All prices must be greater than 0');
       return;
     }
-
-    setLoading(true);
     
     try {
-      // Call Shopify API to create product
-      const response = await fetch('/api/shopify/products', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: formData.title,
-          description: formData.description,
-          vendor: formData.vendor,
-          productType: formData.productType,
-          tags: formData.tags,
-          status: 'active',
-          variants: [{
-            title: 'Default',
-            price: formData.currentPrice.toString(),
-            compareAtPrice: formData.maxPrice.toString(),
-            sku: `SKU-${Date.now()}`,
-            inventoryQuantity: 100,
-            weight: 0,
-            weightUnit: 'kg',
-          }],
-          images: formData.images.map(img => ({
-            src: img.src,
-            alt: img.alt || formData.title,
-          })),
-        }),
+      await createProductMutation.mutateAsync({
+        title: formData.title,
+        description: formData.description,
+        vendor: formData.vendor,
+        productType: formData.productType,
+        tags: formData.tags,
+        status: 'active',
+        variants: [{
+          title: 'Default',
+          price: formData.currentPrice.toString(),
+          compareAtPrice: formData.maxPrice.toString(),
+          sku: `SKU-${Date.now()}`,
+          inventoryQuantity: 100,
+          weight: 0,
+          weightUnit: 'kg',
+        }],
+        images: formData.images.map(img => ({
+          src: img.src,
+          alt: img.alt || formData.title,
+        })),
       });
-
-      const result = await response.json();
-      
-      if (!result.success) {
-        throw new Error(result.error?.message || 'Failed to create product');
-      }
       
       onProductCreated?.(formData);
       
@@ -115,10 +101,8 @@ export function NewProductModal({ onProductCreated }: NewProductModalProps) {
       setOpen(false);
       resetForm();
     } catch (error) {
-      toast.error('Failed to create product');
+      toast.error(error instanceof Error ? error.message : 'Failed to create product');
       console.error('Error creating product:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -377,8 +361,8 @@ export function NewProductModal({ onProductCreated }: NewProductModalProps) {
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Product'}
+            <Button type="submit" disabled={createProductMutation.isPending}>
+              {createProductMutation.isPending ? 'Creating...' : 'Create Product'}
             </Button>
           </DialogFooter>
         </form>

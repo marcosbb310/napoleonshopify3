@@ -196,7 +196,7 @@ async function revertPrice(product: any, config: any, stats: any, revenue: any) 
 
   // Set waiting state (updatePrice already set next_price_change_date)
   const waitUntil = new Date();
-  waitUntil.setDate(waitUntil.getDate() + config.wait_days_after_revert);
+  waitUntil.setHours(waitUntil.getHours() + config.wait_hours_after_revert);
   await supabaseAdmin
     .from('pricing_config')
     .update({

@@ -1,7 +1,7 @@
 // Products page - main hub for product management
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { 
   useProducts, 
@@ -30,6 +30,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Switch } from '@/shared/components/ui/switch';
 import { X, Check, Undo2, Zap, ZapOff } from 'lucide-react';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import { DateRange } from 'react-day-picker';
 import { addDays } from 'date-fns';
 
@@ -78,7 +79,12 @@ export default function ProductsPage() {
   // Get all products (no loading state for filtering/searching)
   const { products: allProducts, loading, error, refetch } = useProducts();
 
-  // Set undo state when global snapshots change and auto-reload
+  // Memoized callback for global toggle to prevent infinite loops
+  const onGlobalToggle = useCallback(() => {
+    handleGlobalToggle(globalEnabled);
+  }, [globalEnabled, handleGlobalToggle]);
+
+  // Set undo state when global snapshots change - no reload needed!
   useEffect(() => {
     if (globalSnapshots && globalSnapshots.length > 0) {
       console.log('🔄 Global snapshots received:', globalSnapshots.length);
@@ -93,21 +99,29 @@ export default function ProductsPage() {
       // Save undo state (persists to localStorage)
       setUndo(action, globalSnapshots, description);
       
-      console.log('🔄 Reloading page in 500ms...');
+      // Update product prices in productUpdates (source of truth) - no page reload!
+      // This ensures prices persist through filters/searches
+      setProductUpdates(prev => {
+        const newMap = new Map(prev);
+        globalSnapshots.forEach(snapshot => {
+          if (snapshot.newPrice !== undefined) {
+            console.log(`Updating product ${snapshot.shopifyId} to $${snapshot.newPrice}`);
+            const existingUpdates = newMap.get(snapshot.shopifyId) || {};
+            newMap.set(snapshot.shopifyId, { 
+              ...existingUpdates, 
+              currentPrice: snapshot.newPrice 
+            });
+          }
+        });
+        return newMap;
+      });
       
-      // Auto-reload page to show updated prices (undo state persists via localStorage)
-      setTimeout(() => {
-        console.log('🔄 Reloading now...');
-        window.location.reload();
-      }, 500);
-      
-      // Don't clear snapshots until after reload
-      return () => {
-        setGlobalSnapshots(null);
-      };
+      // Clear snapshots after processing
+      setGlobalSnapshots(null);
     }
-  }, [globalSnapshots, globalEnabled, setUndo, setGlobalSnapshots]);
-  const [products, setProducts] = useState<ProductWithPricing[]>([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalSnapshots, globalEnabled, setUndo]); // setGlobalSnapshots removed - it's stable from context
+  
   const [productUpdates, setProductUpdates] = useState<Map<string, Partial<ProductWithPricing['pricing']>>>(new Map());
   const [lastBulkAction, setLastBulkAction] = useState<{
     updates: Map<string, Partial<ProductWithPricing['pricing']>>;
@@ -144,8 +158,8 @@ export default function ProductsPage() {
     }
   }, [searchParams]);
 
-  // Filter and sort products locally for instant results
-  useEffect(() => {
+  // Filter and sort products - compute on every render like products-test2 to avoid useEffect loops
+  const products = useMemo(() => {
     let filtered = applyUpdatesToProducts([...allProducts]);
 
     // Apply advanced filters first
@@ -272,7 +286,7 @@ export default function ProductsPage() {
       });
     }
 
-    setProducts(filtered);
+    return filtered;
   }, [allProducts, searchQuery, selectedTags, filter, productUpdates]);
 
   const handleUpdatePricing = (productId: string, pricing: { basePrice?: number; cost?: number; maxPrice?: number; currentPrice?: number }) => {
@@ -415,11 +429,20 @@ export default function ProductsPage() {
     });
   };
 
-  const handleProductSmartPricingToggle = (productId: string, enabled: boolean) => {
+  const handleProductSmartPricingToggle = (productId: string, enabled: boolean, newPrice?: number) => {
     setProductState(productId, enabled);
 
-    // TODO: Call API to toggle smart pricing for single product
-    console.log(`${enabled ? 'Enabling' : 'Disabling'} smart pricing for product:`, productId);
+    // Update product price in allProducts (source of truth) if provided
+    // This ensures the price persists through filters/searches
+    if (newPrice !== undefined) {
+      // Store in productUpdates so it persists
+      setProductUpdates(prev => {
+        const newMap = new Map(prev);
+        const existingUpdates = newMap.get(productId) || {};
+        newMap.set(productId, { ...existingUpdates, currentPrice: newPrice });
+        return newMap;
+      });
+    }
   };
 
   const handleTagClick = (tag: string) => {
@@ -456,18 +479,31 @@ export default function ProductsPage() {
         <div>
           <div className="flex items-center gap-4 mb-2">
             <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+            {/* Test Layout Links */}
+            <div className="flex items-center gap-2">
+              <Link href="/products-test">
+                <Badge variant="outline" className="text-xs cursor-pointer hover:bg-accent">
+                  🧪 Accordion
+                </Badge>
+              </Link>
+              <Link href="/products-test2">
+                <Badge variant="outline" className="text-xs cursor-pointer hover:bg-accent">
+                  🧪 Slide-out
+                </Badge>
+              </Link>
+            </div>
             {/* Global Smart Pricing Toggle */}
             <div className="flex items-center gap-3 px-4 py-2 rounded-lg border bg-card shadow-sm">
               <div className="flex items-center gap-2">
                 <Zap className={`h-4 w-4 ${globalEnabled ? 'text-primary' : 'text-muted-foreground'}`} />
-                <span className="text-sm font-medium">Smart Pricing</span>
+                <span className="text-sm font-medium">Global Smart Pricing</span>
                 <Badge variant={globalEnabled ? 'default' : 'secondary'} className="text-xs">
                   {globalEnabled ? 'ON' : 'OFF'}
                 </Badge>
               </div>
               <Switch 
                 checked={globalEnabled}
-                onCheckedChange={() => handleGlobalToggle(globalEnabled)}
+                onCheckedChange={onGlobalToggle}
                 disabled={isLoadingGlobal}
                 aria-label="Toggle smart pricing globally"
               />
@@ -479,8 +515,8 @@ export default function ProductsPage() {
                   const result = await executeUndo();
                   if (result.success) {
                     toast.success(`Undone: ${undoState?.description}`);
-                    // Reload page to show restored prices
-                    window.location.reload();
+                    // Prices will be refreshed automatically via React Query cache invalidation
+                    refetch(); // Force refetch to ensure prices are up-to-date
                   } else {
                     toast.error('Failed to undo');
                   }
@@ -666,7 +702,7 @@ export default function ProductsPage() {
                 onShowVariants={handleShowVariants}
                 isShowingVariants={product.id === showingVariantsForProduct}
                 smartPricingEnabled={isProductEnabled(product.id)}
-                onSmartPricingToggle={(enabled) => handleProductSmartPricingToggle(product.id, enabled)}
+                onSmartPricingToggle={(enabled, newPrice) => handleProductSmartPricingToggle(product.id, enabled, newPrice)}
               />
             ))}
           </div>

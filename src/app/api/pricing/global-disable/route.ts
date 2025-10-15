@@ -35,7 +35,8 @@ export async function POST() {
       snapshots.push({
         productId: product.id,
         shopifyId: product.shopify_id,
-        price: product.current_price,
+        price: product.current_price, // Old price (for undo)
+        newPrice: priceToRevert, // New price (for UI update)
         auto_pricing_enabled: true,
         current_state: config.current_state,
         next_price_change_date: config.next_price_change_date,

@@ -29,7 +29,7 @@ CREATE TABLE pricing_config (
   increment_percentage DECIMAL(5, 2) DEFAULT 5.0,
   period_hours INTEGER DEFAULT 24,
   revenue_drop_threshold DECIMAL(5, 2) DEFAULT 1.0,
-  wait_days_after_revert INTEGER DEFAULT 2,
+  wait_hours_after_revert INTEGER DEFAULT 24, -- 1 day in hours (matches period_hours)
   max_increase_percentage DECIMAL(5, 2) DEFAULT 100.0,
   current_state pricing_state DEFAULT 'increasing',
   last_price_change_date TIMESTAMPTZ,
