@@ -3,7 +3,7 @@
 // Can be safely deleted if not preferred
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   useProducts, 
@@ -40,6 +40,7 @@ export default function ProductsTestPage() {
   });
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+
 
   // Get all products
   const { products: allProducts, loading, error, refetch } = useProducts();
@@ -327,6 +328,7 @@ export default function ProductsTestPage() {
           </p>
         </div>
       </div>
+
 
       {/* Alert Banner */}
       <Card className="p-4 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">

@@ -1,13 +1,10 @@
 // Layout for authenticated app pages
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/shared/components/ui/sidebar';
-import { AuthSkeleton, AuthInitSkeleton, AppSidebar, UserMenu } from '@/shared/components';
+import React, { useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { AuthSkeleton, AuthInitSkeleton, AppNavbar } from '@/shared/components';
 import { useAuth, useAuthHydration } from '@/features/auth';
-import { usePathname } from 'next/navigation';
-import { Separator } from '@/shared/components/ui/separator';
 import { Toaster } from '@/shared/components/ui/sonner';
 import { SmartPricingProvider } from '@/features/pricing-engine';
 
@@ -57,39 +54,13 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <div className="flex flex-1 items-center justify-between">
-            <div className="flex items-center gap-2">
-              {/* Page title will be rendered here by child pages */}
-            </div>
-            <div className="flex items-center gap-4">
-              {/* Global Smart Pricing Toggle - TODO: Re-enable when UI integration complete */}
-              {/* <div className="flex items-center gap-3 px-3 py-2 rounded-lg border bg-card">
-                <div className="flex items-center gap-2">
-                  <Zap className={`h-4 w-4 text-primary`} />
-                  <span className="text-sm font-medium">Smart Pricing</span>
-                </div>
-                <Switch 
-                  checked={true}
-                  onCheckedChange={() => {}}
-                  aria-label="Toggle smart pricing globally"
-                />
-              </div> */}
-              <UserMenu />
-            </div>
-          </div>
-        </header>
-        <main className="flex flex-1 flex-col gap-4 p-4 pt-6">
-          {children}
-        </main>
-      </SidebarInset>
+    <div className="min-h-screen flex flex-col">
+      <AppNavbar />
+      <main className="flex-1 container mx-auto px-4 py-6">
+        {children}
+      </main>
       <Toaster />
-    </SidebarProvider>
+    </div>
   );
 }
 

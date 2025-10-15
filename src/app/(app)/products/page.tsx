@@ -23,7 +23,6 @@ import {
   UndoButton 
 } from '@/features/pricing-engine';
 import type { ViewMode } from '@/shared/types';
-import { DateRangePicker } from '@/shared/components';
 import { Card } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
@@ -31,8 +30,6 @@ import { Switch } from '@/shared/components/ui/switch';
 import { X, Check, Undo2, Zap, ZapOff } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { DateRange } from 'react-day-picker';
-import { addDays } from 'date-fns';
 
 export default function ProductsPage() {
   const searchParams = useSearchParams();
@@ -70,11 +67,6 @@ export default function ProductsPage() {
   // Undo state management
   const { canUndo, formatTimeRemaining, setUndo, executeUndo, undoState } = useUndoState();
   
-  // Date range state - defaults to last 30 days
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: addDays(new Date(), -29),
-    to: new Date(),
-  });
 
   // Get all products (no loading state for filtering/searching)
   const { products: allProducts, loading, error, refetch } = useProducts();
@@ -534,10 +526,6 @@ export default function ProductsPage() {
           </p>
         </div>
         <div className="flex flex-col gap-2 items-end">
-          <DateRangePicker
-            dateRange={dateRange}
-            onDateRangeChange={setDateRange}
-          />
           <div className="flex gap-2">
             {lastBulkAction && (
               <Button
