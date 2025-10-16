@@ -30,8 +30,8 @@ export function useGlobalDisable() {
       return data;
     },
     onSuccess: () => {
-      // Invalidate products query to refetch with updated prices
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      // Refetch products immediately with updated prices
+      queryClient.refetchQueries({ queryKey: ['products'] });
     },
   });
 }
@@ -69,8 +69,8 @@ export function useGlobalResume() {
       return data;
     },
     onSuccess: () => {
-      // Invalidate products query to refetch with updated prices
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      // Refetch products immediately with updated prices
+      queryClient.refetchQueries({ queryKey: ['products'] });
     },
   });
 }

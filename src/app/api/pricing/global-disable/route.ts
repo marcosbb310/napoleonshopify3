@@ -21,49 +21,66 @@ export async function POST() {
       });
     }
 
-    const snapshots = [];
-
-    // Process each product
-    for (const product of products) {
+    // Build snapshots array
+    const snapshots = products.map(product => {
       const config = Array.isArray(product.pricing_config)
         ? product.pricing_config[0]
         : product.pricing_config;
-
       const priceToRevert = config.pre_smart_pricing_price || product.starting_price;
 
-      // Store snapshot for undo
-      snapshots.push({
+      return {
         productId: product.id,
         shopifyId: product.shopify_id,
-        price: product.current_price, // Old price (for undo)
-        newPrice: priceToRevert, // New price (for UI update)
+        price: product.current_price,
+        newPrice: priceToRevert,
         auto_pricing_enabled: true,
         current_state: config.current_state,
         next_price_change_date: config.next_price_change_date,
         revert_wait_until_date: config.revert_wait_until_date,
-      });
+      };
+    });
 
-      // Update pricing config
-      await supabaseAdmin
-        .from('pricing_config')
-        .update({
-          last_smart_pricing_price: product.current_price,
-          auto_pricing_enabled: false,
-          current_state: 'increasing',
-          next_price_change_date: null,
-          revert_wait_until_date: null,
-        })
-        .eq('product_id', product.id);
+    // Process all products in PARALLEL for much faster performance
+    await Promise.all(
+      products.map(async (product) => {
+        const config = Array.isArray(product.pricing_config)
+          ? product.pricing_config[0]
+          : product.pricing_config;
+        const priceToRevert = config.pre_smart_pricing_price || product.starting_price;
 
-      // Update product price
-      await supabaseAdmin
-        .from('products')
-        .update({ current_price: priceToRevert })
-        .eq('id', product.id);
+        // Run all 3 operations in parallel for this product
+        await Promise.all([
+          // Update pricing config
+          supabaseAdmin
+            .from('pricing_config')
+            .update({
+              last_smart_pricing_price: product.current_price,
+              auto_pricing_enabled: false,
+              current_state: 'increasing',
+              next_price_change_date: null,
+              revert_wait_until_date: null,
+            })
+            .eq('product_id', product.id),
+          
+          // Update product price
+          supabaseAdmin
+            .from('products')
+            .update({ current_price: priceToRevert })
+            .eq('id', product.id),
+          
+          // Update Shopify (don't wait for it, fire and forget)
+          updateShopifyPrice(product.shopify_id, priceToRevert).catch(err => 
+            console.error(`Failed to update Shopify for ${product.shopify_id}:`, err)
+          ),
+        ]);
+      })
+    );
 
-      // Update Shopify
-      await updateShopifyPrice(product.shopify_id, priceToRevert);
-    }
+    // CRITICAL: Update global setting in Supabase
+    await supabaseAdmin
+      .from('global_settings')
+      .update({ value: false })
+      .eq('key', 'smart_pricing_global_enabled');
 
     return NextResponse.json({
       success: true,

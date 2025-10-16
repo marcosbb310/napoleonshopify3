@@ -47,6 +47,9 @@ interface ProductCardProps {
   smartPricingEnabled?: boolean;
   onSmartPricingToggle?: (enabled: boolean, newPrice?: number) => void;
   onViewAnalytics?: (productId: string) => void;
+  hasAnySelection?: boolean;
+  testBackgroundColor?: string; // TEMPORARY: For testing visibility (e.g., "white", "black", "#ff0000")
+  globalSmartPricingEnabled?: boolean; // NEW: Pass global state as prop to avoid circular dependency
 }
 
 export function ProductCard({ 
@@ -61,7 +64,10 @@ export function ProductCard({
   isShowingVariants,
   smartPricingEnabled = true,
   onSmartPricingToggle,
-  onViewAnalytics
+  onViewAnalytics,
+  hasAnySelection = false,
+  testBackgroundColor,
+  globalSmartPricingEnabled = true
 }: ProductCardProps) {
   const [editingField, setEditingField] = useState<'basePrice' | 'cost' | 'maxPrice' | 'currentPrice' | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -262,309 +268,130 @@ export function ProductCard({
   };
 
   return (
-    <Card className={`group relative overflow-hidden transition-all h-full flex flex-col ${
-      isShowingVariants 
+    <Card className={`group relative overflow-hidden transition-all aspect-square ${
+      isSelected
+        ? 'border-4 border-primary shadow-2xl opacity-100' 
+        : isShowingVariants 
         ? 'shadow-2xl border-2 border-primary z-50 scale-105' 
+        : hasAnySelection
+        ? 'opacity-40 hover:opacity-60 border-2 hover:border-primary/40'
         : 'hover:shadow-lg border-2 hover:border-primary/40 hover:shadow-primary/10'
     }`}>
-      <div className="absolute left-3 top-3 z-20">
-        <div className="rounded-md bg-background/95 backdrop-blur-sm p-1.5 shadow-md border hover:border-primary transition-colors">
-          <Checkbox
-            checked={isSelected}
-            onCheckedChange={() => onSelect(product.id)}
+      {/* Full Background Image */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        {testBackgroundColor ? (
+          // TEMPORARY TEST: Solid color background for testing visibility
+          <div className="h-full w-full" style={{ backgroundColor: testBackgroundColor }} />
+        ) : product.images[0] ? (
+          <Image
+            src={product.images[0].src}
+            alt={product.title}
+            fill
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
-        </div>
+        ) : (
+          <div className="flex h-full items-center justify-center bg-gradient-to-br from-muted to-muted/50">
+            <span className="text-muted-foreground text-sm">No image</span>
+          </div>
+        )}
+        {/* Stronger gradient overlay for guaranteed text readability - SKIP for test colors to see visibility */}
+        {!testBackgroundColor && (
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/75 pointer-events-none" />
+        )}
       </div>
 
-      {/* OPTION 2: REMOVED - Price History button (redundant with View Analytics) */}
-      {/* <div className="absolute right-3 top-3 z-20 flex gap-2">
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8 rounded-md bg-background/95 backdrop-blur-sm shadow-md border hover:border-primary hover:bg-primary/10 hover:text-primary transition-colors"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowPriceHistory(true);
-          }}
-          title="View Price History"
-        >
-          <ChartLine className="h-4 w-4" />
-        </Button>
-      </div> */}
-
-      <div className="flex-1 flex flex-col">
-        <div className="relative aspect-[5/3] overflow-hidden bg-gradient-to-br from-muted to-muted/50 z-0">
-          {product.images[0] ? (
-            <Image
-              src={product.images[0].src}
-              alt={product.title}
-              fill
-              className="object-cover transition-transform duration-300 group-hover:scale-102"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <span className="text-muted-foreground text-sm">No image</span>
-            </div>
-          )}
-          {/* Gradient overlay for better text readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      {/* Content Overlay */}
+      <div className="relative z-10 h-full flex flex-col p-3 pointer-events-none">
+        {/* Top Section - Title */}
+        <div className="flex-shrink-0">
+          <div className="p-2 pl-10">
+            <h3 className="font-semibold text-sm truncate leading-tight text-white" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.8)' }}>{product.title}</h3>
+          </div>
         </div>
 
-        <CardContent className="p-3 flex-1 flex flex-col">
-          <div className="space-y-2 flex-1 flex flex-col">
-            {/* Title & Vendor */}
-            <div>
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm truncate mb-0.5 leading-tight">{product.title}</h3>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {product.vendor}
-                  </p>
-                </div>
-                {/* OPTION 2: REMOVED - Variants link (moved to analytics modal) */}
-                {/* {product.variants.length > 1 && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onShowVariants?.(product.id);
-                    }}
-                    className="text-xs text-primary hover:text-primary/80 font-medium whitespace-nowrap transition-colors"
-                  >
-                    {product.variants.length} variants
-                  </button>
-                )} */}
+        {/* Spacer to push content to bottom */}
+        <div className="flex-1" />
+
+        {/* Bottom Section - Price & Actions */}
+        <div className="flex-shrink-0 space-y-3 pb-2">
+          {/* Price */}
+          <div className="p-3">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-white" style={{ textShadow: '0 2px 6px rgba(0,0,0,0.9), 0 0 3px rgba(0,0,0,0.9)' }}>
+                ${variantPricing.currentPrice.toFixed(2)}
               </div>
-              {/* OPTION 2: REMOVED - Algorithm Status Badge & Update Timestamp */}
-              {/* <div className="mt-1.5 flex items-center gap-2">
-                <Badge 
-                  variant="outline" 
-                  className={`text-xs font-normal ${algorithmStatus.color} ${algorithmStatus.bgColor} ${algorithmStatus.borderColor}`}
-                >
-                  <algorithmStatus.icon className="h-3 w-3 mr-1" />
-                  {algorithmStatus.label}
-                </Badge>
-                <span className="text-xs text-muted-foreground/70">
-                  Updated 2h ago
-                </span>
-              </div> */}
             </div>
+          </div>
 
-            {/* OPTION 2: REMOVED - Last Price Change Badge (moved to analytics modal) */}
-            {/* <div className="flex items-center justify-between bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-2 border border-primary/20">
-              <div>
-                <div className="text-xs text-muted-foreground mb-0.5">Last Change</div>
-                <div className="text-lg font-bold tracking-tight text-primary">
-                  ${product.pricing.basePrice.toFixed(2)} → ${variantPricing.currentPrice.toFixed(2)}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className={`flex items-center gap-1 text-base font-bold ${profitChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {profitChange >= 0 ? (
-                    <TrendingUp className="h-3.5 w-3.5" />
-                  ) : (
-                    <TrendingDown className="h-3.5 w-3.5" />
-                  )}
-                  <span>{parseFloat(profitChangePercent) >= 0 ? '+' : ''}{profitChangePercent}%</span>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {product.pricing.profitMargin.toFixed(1)}% margin
-                </div>
-              </div>
-            </div> */}
-
-            {/* OPTION 2: REMOVED - Variant Selector (moved to analytics modal) */}
-            {/* <div className="min-h-[32px]">
-              {variantOptions && variantOptions.option1.length > 0 && (
-                <div className="space-y-2">
-                  <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowVariants(!showVariants);
-                  }}
-                  className="w-full flex items-center justify-between text-xs py-1.5 px-2 rounded-md hover:bg-muted/50 transition-colors"
-                >
-                  <span className="text-muted-foreground">
-                    <span className="font-medium">Variant:</span> {selectedVariant.title}
-                  </span>
-                  {showVariants ? (
-                    <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
-                </button>
-                
-                {showVariants && (
-                  <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
-                    <div className="flex flex-wrap gap-1.5">
-                      {variantOptions.option1.map((option) => {
-                        const isSelected = selectedOption1 === option;
-                        return (
-                          <Badge
-                            key={option}
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedOption1(option);
-                              const variant = product.variants.find(v => v.title.startsWith(option));
-                              if (variant) setSelectedVariantId(variant.id);
-                            }}
-                            className={`text-xs font-normal py-1 px-2.5 cursor-pointer transition-all duration-200 ${
-                              isSelected
-                                ? 'bg-primary text-primary-foreground border-primary hover:bg-primary/90'
-                                : 'bg-white text-foreground border-border hover:bg-muted hover:border-primary'
-                            }`}
-                          >
-                            {option}
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                    
-                    {selectedOption1 && variantOptions.option2.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {getAvailableOption2(selectedOption1).map((option) => {
-                          const fullTitle = `${selectedOption1} / ${option}`;
-                          const variant = product.variants.find(v => v.title === fullTitle);
-                          const isSelected = variant?.id === selectedVariantId;
-                          
-                          return (
-                            <Badge
-                              key={option}
-                              variant="outline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (variant) setSelectedVariantId(variant.id);
-                              }}
-                              className={`text-xs font-normal py-1 px-2.5 cursor-pointer transition-all duration-200 ${
-                                isSelected
-                                  ? 'bg-secondary text-secondary-foreground border-secondary hover:bg-secondary/90'
-                                  : 'bg-white text-foreground border-border hover:bg-muted hover:border-secondary'
-                              }`}
-                            >
-                              {option}
-                            </Badge>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-                </div>
+          {/* Buttons */}
+          <div className="space-y-1.5 pointer-events-auto">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggle(smartPricingEnabled);
+              }}
+              disabled={isTogglingSmartPricing}
+              className={`relative w-full px-3 py-1.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-md shadow-lg ${
+                !globalSmartPricingEnabled
+                  ? 'bg-orange-500/80 hover:bg-orange-600/80 text-white'
+                  : smartPricingEnabled 
+                    ? 'bg-white/90 hover:bg-white text-gray-900 animate-pulse-subtle' 
+                    : 'bg-black/60 hover:bg-black/70 text-white'
+              }`}
+            >
+              {/* Active glow effect */}
+              {globalSmartPricingEnabled && smartPricingEnabled && (
+                <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-blue-500/20 animate-glow-pulse" />
               )}
-            </div> */}
-
-            {/* OPTION 2: Current Price - Now Prominent and Centered */}
-            <div className="flex items-center justify-center py-4">
-              <div className="text-center">
-                <div className="text-xs text-muted-foreground mb-1">Current Price</div>
-                <div className="text-3xl font-bold text-primary">
-                  ${variantPricing.currentPrice.toFixed(2)}
-                </div>
-              </div>
-            </div>
-
-            {/* OPTION 2: REMOVED - Base Price (moved to analytics modal settings) */}
-            {/* <div className="space-y-1 border-t pt-1.5">
-              <div className="flex items-center justify-between py-0.5 px-2 rounded-md hover:bg-muted/50 transition-colors">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Base</span>
-                {editingField === 'basePrice' ? (
-                  <div className="flex items-center gap-0.5">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-7 w-20 text-sm font-semibold"
-                      autoFocus
-                    />
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSaveEdit}>
-                      <Check className="h-3.5 w-3.5 text-green-600" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancelEdit}>
-                      <X className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={(e) => handleStartEdit('basePrice', variantPricing.basePrice, e)}
-                    className="text-sm font-bold text-foreground hover:text-white hover:bg-primary transition-all duration-200 cursor-pointer px-2.5 py-1 rounded-md"
-                  >
-                    ${variantPricing.basePrice.toFixed(2)}
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between py-0.5 px-2 rounded-md hover:bg-muted/50 transition-colors">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current</span>
-                {editingField === 'currentPrice' ? (
-                  <div className="flex items-center gap-0.5">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-7 w-20 text-sm font-semibold"
-                      autoFocus
-                    />
-                    <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-primary hover:text-white transition-all duration-200" onClick={handleSaveEdit}>
-                      <Check className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-destructive hover:text-white transition-all duration-200" onClick={handleCancelEdit}>
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={(e) => handleStartEdit('currentPrice', variantPricing.currentPrice, e)}
-                    className="text-sm font-bold text-foreground hover:text-white hover:bg-primary transition-all duration-200 cursor-pointer px-2.5 py-1 rounded-md"
-                  >
-                    ${variantPricing.currentPrice.toFixed(2)}
-                  </button>
-                )}
-              </div>
-            </div> */}
-
-            {/* Smart Pricing Toggle & Analytics - Full Width Buttons at Bottom */}
-            <div className="mt-auto pt-2 space-y-1.5">
+              <Zap className={`h-3.5 w-3.5 relative z-10 ${
+                !globalSmartPricingEnabled 
+                  ? 'text-white' 
+                  : smartPricingEnabled 
+                    ? 'text-primary animate-pulse' 
+                    : 'text-white'
+              }`} />
+              <span className="text-xs relative z-10">
+                {isTogglingSmartPricing 
+                  ? 'Updating...' 
+                  : !globalSmartPricingEnabled
+                    ? 'Smart Pricing Paused'
+                    : smartPricingEnabled ? 'Smart Pricing Active' : 'Smart Pricing Off'}
+              </span>
+            </button>
+            
+            {/* Analytics Button */}
+            {onViewAnalytics && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleToggle(smartPricingEnabled);
+                  onViewAnalytics(product.id);
                 }}
-                disabled={isTogglingSmartPricing}
-                className={`w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed ${
-                  smartPricingEnabled 
-                    ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm' 
-                    : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-                }`}
+                className="w-full px-3 py-1.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold bg-black/60 hover:bg-black/70 text-white backdrop-blur-md shadow-lg"
               >
-                <Zap className={`h-4 w-4 ${smartPricingEnabled ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
-                <span className="text-sm">
-                  {isTogglingSmartPricing 
-                    ? 'Updating...' 
-                    : smartPricingEnabled ? 'Smart Pricing Active' : 'Smart Pricing Off'}
-                </span>
+                <span className="text-xs">📊 View Analytics</span>
               </button>
-              
-              {/* Analytics Button */}
-              {onViewAnalytics && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onViewAnalytics(product.id);
-                  }}
-                  className="w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold bg-secondary hover:bg-secondary/80 text-secondary-foreground"
-                >
-                  <span className="text-sm">📊 View Analytics</span>
-                </button>
-              )}
-            </div>
+            )}
           </div>
-        </CardContent>
+        </div>
+      </div>
+
+      {/* Checkbox - Top Left */}
+      <div 
+        className="absolute left-3 top-3 z-50"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect(product.id);
+        }}
+      >
+        <div className={`h-5 w-5 rounded border-2 flex items-center justify-center cursor-pointer transition-all ${
+          isSelected 
+            ? 'bg-primary border-primary' 
+            : 'bg-white/80 border-gray-300 hover:border-primary'
+        }`}>
+          {isSelected && (
+            <Check className="h-4 w-4 text-white" />
+          )}
+        </div>
       </div>
 
       {/* Price History Dialog */}

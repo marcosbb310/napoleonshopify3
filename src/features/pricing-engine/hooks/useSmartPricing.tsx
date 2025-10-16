@@ -11,7 +11,7 @@ type ReactNode = React.ReactNode;
 interface SmartPricingContextType {
   globalEnabled: boolean;
   setGlobalEnabled: (enabled: boolean) => Promise<void>;
-  handleGlobalToggle: (currentEnabled: boolean) => void;
+  handleGlobalToggle: () => void;
   confirmGlobalDisable: () => Promise<void>;
   confirmGlobalEnable: () => void;
   confirmGlobalResume: (option: ResumeOption) => Promise<void>;
@@ -42,6 +42,28 @@ export function SmartPricingProvider({ children }: { children: ReactNode }) {
   const [globalSnapshots, setGlobalSnapshots] = useState<ProductSnapshot[] | null>(null);
   const [productCount, setProductCount] = useState(0);
 
+  // CRITICAL: Load initial global state from Supabase on mount
+  useEffect(() => {
+    const loadGlobalState = async () => {
+      try {
+        console.log('🔄 Loading global pricing state from Supabase...');
+        const response = await fetch('/api/settings/global-pricing');
+        const data = await response.json();
+        if (data.enabled !== undefined) {
+          console.log('✅ Loaded global pricing state from Supabase:', data.enabled);
+          console.log('🎨 PowerButton should now be:', data.enabled ? 'GREEN (ON)' : 'GREY (OFF)');
+          setGlobalEnabledState(data.enabled);
+        } else {
+          console.warn('⚠️ No enabled value in response:', data);
+        }
+      } catch (error) {
+        console.error('❌ Failed to load global pricing state:', error);
+        // Default to true on error (fail-safe)
+      }
+    };
+    loadGlobalState();
+  }, []);
+
   // React Query mutations
   const globalDisableMutation = useGlobalDisable();
   const globalResumeMutation = useGlobalResume();
@@ -54,10 +76,15 @@ export function SmartPricingProvider({ children }: { children: ReactNode }) {
   const isLoadingGlobal = isDisablePending || isResumePending;
 
   // Handle global toggle click - memoized to prevent re-renders
-  const handleGlobalToggle = useCallback((currentEnabled: boolean) => {
-    setPendingGlobalAction(currentEnabled ? 'disable' : 'enable');
+  const handleGlobalToggle = useCallback(() => {
+    // Read the CURRENT state directly from the state variable to avoid stale closures
+    const currentEnabled = globalEnabled;
+    console.log('🔘 PowerButton clicked - Current state:', currentEnabled);
+    const action = currentEnabled ? 'disable' : 'enable';
+    console.log('📋 Setting pending action to:', action);
+    setPendingGlobalAction(action);
     setShowGlobalConfirm(true);
-  }, []);
+  }, [globalEnabled]);
 
   // Confirm global disable - memoized to prevent re-renders
   const confirmGlobalDisable = useCallback(async () => {
@@ -123,8 +150,11 @@ export function SmartPricingProvider({ children }: { children: ReactNode }) {
 
   // Legacy method for backward compatibility - memoized to prevent re-renders
   const setGlobalEnabled = useCallback(async (enabled: boolean) => {
-    handleGlobalToggle(!enabled);
-  }, []); // Empty deps - handleGlobalToggle is already stable
+    // Only toggle if the desired state is different from current state
+    if (enabled !== globalEnabled) {
+      handleGlobalToggle();
+    }
+  }, [globalEnabled, handleGlobalToggle]);
 
   const setProductState = useCallback((productId: string, enabled: boolean) => {
     setProductStates(prev => {

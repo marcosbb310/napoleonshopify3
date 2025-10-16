@@ -17,4 +17,5 @@ export {
 export { SmartPricingResumeModal } from './components/SmartPricingResumeModal';
 export { SmartPricingConfirmDialog } from './components/SmartPricingConfirmDialog';
 export { UndoButton } from './components/UndoButton';
+export { PowerButton } from './components/PowerButton';
 export type { ProductSnapshot, UndoState, UndoActionType, ResumeOption } from './types';

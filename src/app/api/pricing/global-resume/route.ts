@@ -31,48 +31,68 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const snapshots = [];
-
-    // Process each product
-    for (const product of products) {
+    // Build snapshots array
+    const snapshots = products.map(product => {
       const config = Array.isArray(product.pricing_config)
         ? product.pricing_config[0]
         : product.pricing_config;
-
-      // Determine price based on choice
+      
       const newPrice = resumeOption === 'base'
         ? config.pre_smart_pricing_price || product.starting_price
         : config.last_smart_pricing_price || product.current_price;
 
-      // Store snapshot for undo
-      snapshots.push({
+      return {
         productId: product.id,
         shopifyId: product.shopify_id,
-        price: product.current_price, // Old price (for undo)
-        newPrice: newPrice, // New price (for UI update)
+        price: product.current_price,
+        newPrice: newPrice,
         auto_pricing_enabled: false,
         current_state: config.current_state,
-      });
+      };
+    });
 
-      // Update pricing config
-      await supabaseAdmin
-        .from('pricing_config')
-        .update({
-          auto_pricing_enabled: true,
-          current_state: 'increasing',
-          revert_wait_until_date: null,
-        })
-        .eq('product_id', product.id);
+    // Process all products in PARALLEL for much faster performance
+    await Promise.all(
+      products.map(async (product) => {
+        const config = Array.isArray(product.pricing_config)
+          ? product.pricing_config[0]
+          : product.pricing_config;
+        
+        const newPrice = resumeOption === 'base'
+          ? config.pre_smart_pricing_price || product.starting_price
+          : config.last_smart_pricing_price || product.current_price;
 
-      // Update product price
-      await supabaseAdmin
-        .from('products')
-        .update({ current_price: newPrice })
-        .eq('id', product.id);
+        // Run all 3 operations in parallel for this product
+        await Promise.all([
+          // Update pricing config
+          supabaseAdmin
+            .from('pricing_config')
+            .update({
+              auto_pricing_enabled: true,
+              current_state: 'increasing',
+              revert_wait_until_date: null,
+            })
+            .eq('product_id', product.id),
+          
+          // Update product price
+          supabaseAdmin
+            .from('products')
+            .update({ current_price: newPrice })
+            .eq('id', product.id),
+          
+          // Update Shopify (don't wait for it, fire and forget)
+          updateShopifyPrice(product.shopify_id, newPrice).catch(err => 
+            console.error(`Failed to update Shopify for ${product.shopify_id}:`, err)
+          ),
+        ]);
+      })
+    );
 
-      // Update Shopify
-      await updateShopifyPrice(product.shopify_id, newPrice);
-    }
+    // CRITICAL: Update global setting in Supabase
+    await supabaseAdmin
+      .from('global_settings')
+      .update({ value: true })
+      .eq('key', 'smart_pricing_global_enabled');
 
     return NextResponse.json({
       success: true,

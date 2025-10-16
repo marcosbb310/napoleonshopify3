@@ -20,7 +20,8 @@ import {
   useUndoState, 
   SmartPricingResumeModal, 
   SmartPricingConfirmDialog,
-  UndoButton 
+  UndoButton,
+  PowerButton 
 } from '@/features/pricing-engine';
 import type { ViewMode } from '@/shared/types';
 import { Card } from '@/shared/components/ui/card';
@@ -72,9 +73,10 @@ export default function ProductsPage() {
   const { products: allProducts, loading, error, refetch } = useProducts();
 
   // Memoized callback for global toggle to prevent infinite loops
+  // NOTE: handleGlobalToggle now reads globalEnabled internally, no need to pass it
   const onGlobalToggle = useCallback(() => {
-    handleGlobalToggle(globalEnabled);
-  }, [globalEnabled, handleGlobalToggle]);
+    handleGlobalToggle();
+  }, [handleGlobalToggle]);
 
   // Set undo state when global snapshots change - no reload needed!
   useEffect(() => {
@@ -485,21 +487,12 @@ export default function ProductsPage() {
               </Link>
             </div>
             {/* Global Smart Pricing Toggle */}
-            <div className="flex items-center gap-3 px-4 py-2 rounded-lg border bg-card shadow-sm">
-              <div className="flex items-center gap-2">
-                <Zap className={`h-4 w-4 ${globalEnabled ? 'text-primary' : 'text-muted-foreground'}`} />
-                <span className="text-sm font-medium">Global Smart Pricing</span>
-                <Badge variant={globalEnabled ? 'default' : 'secondary'} className="text-xs">
-                  {globalEnabled ? 'ON' : 'OFF'}
-                </Badge>
-              </div>
-              <Switch 
-                checked={globalEnabled}
-                onCheckedChange={onGlobalToggle}
-                disabled={isLoadingGlobal}
-                aria-label="Toggle smart pricing globally"
-              />
-            </div>
+            <PowerButton 
+              enabled={globalEnabled}
+              onToggle={onGlobalToggle}
+              disabled={isLoadingGlobal}
+              label="Global Smart Pricing"
+            />
             {/* Undo Button */}
             {canUndo && (
               <UndoButton
@@ -691,6 +684,7 @@ export default function ProductsPage() {
                 isShowingVariants={product.id === showingVariantsForProduct}
                 smartPricingEnabled={isProductEnabled(product.id)}
                 onSmartPricingToggle={(enabled, newPrice) => handleProductSmartPricingToggle(product.id, enabled, newPrice)}
+                globalSmartPricingEnabled={globalEnabled}
               />
             ))}
           </div>
