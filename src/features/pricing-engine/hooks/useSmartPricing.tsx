@@ -157,9 +157,11 @@ export function SmartPricingProvider({ children }: { children: ReactNode }) {
   }, [globalEnabled, handleGlobalToggle]);
 
   const setProductState = useCallback((productId: string, enabled: boolean) => {
+    console.log(`🔧 setProductState called - ProductID: ${productId}, Enabled: ${enabled}`);
     setProductStates(prev => {
       const newMap = new Map(prev);
       newMap.set(productId, enabled);
+      console.log(`📊 Updated productStates Map:`, Array.from(newMap.entries()));
       return newMap;
     });
   }, []);
@@ -174,13 +176,18 @@ export function SmartPricingProvider({ children }: { children: ReactNode }) {
 
   const isProductEnabled = useCallback((productId: string) => {
     // If global is off, all products are off
-    if (!globalEnabled) return false;
+    if (!globalEnabled) {
+      console.log(`🔍 isProductEnabled(${productId}) -> false (global OFF)`);
+      return false;
+    }
     // Otherwise check individual product state (default to true)
-    return productStates.get(productId) ?? true;
+    const state = productStates.get(productId) ?? true;
+    console.log(`🔍 isProductEnabled(${productId}) -> ${state} (from Map:`, productStates.get(productId), ')');
+    return state;
   }, [globalEnabled, productStates]);
 
   // Memoize context value with ONLY truly necessary dependencies
-  // Key: exclude functions (they're already memoized) and Maps (cause reference issues)
+  // Include productStates so components re-render when individual product states change
   const value = useMemo(
     () => ({
       globalEnabled,
@@ -210,7 +217,16 @@ export function SmartPricingProvider({ children }: { children: ReactNode }) {
       showGlobalResumeModal,
       pendingGlobalAction,
       globalSnapshots,
-      // Intentionally exclude: productStates, globalPriceOptions, all callbacks
+      productStates, // CRITICAL: Include so ProductCards re-render when individual states change
+      setGlobalEnabled,
+      handleGlobalToggle,
+      confirmGlobalDisable,
+      confirmGlobalEnable,
+      confirmGlobalResume,
+      setProductState,
+      setMultipleProductStates,
+      isProductEnabled,
+      // Intentionally exclude: globalPriceOptions (rare changes)
     ]
   );
 

@@ -172,8 +172,8 @@ export function useUpdatePricingConfig() {
       return data;
     },
     onSuccess: () => {
-      // Invalidate products query to refetch with updated config
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      // Refetch products immediately with updated config for instant UI update
+      queryClient.refetchQueries({ queryKey: ['products'] });
     },
   });
 }
@@ -211,8 +211,8 @@ export function useResumeProduct() {
       return data;
     },
     onSuccess: () => {
-      // Invalidate products query to refetch with updated prices
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      // Refetch products immediately with updated prices for instant UI update
+      queryClient.refetchQueries({ queryKey: ['products'] });
     },
   });
 }

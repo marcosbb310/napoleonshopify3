@@ -5,6 +5,7 @@ import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { ResumeOption, ProductSnapshot } from '../types';
 import { useUpdatePricingConfig, useResumeProduct } from './useSmartPricingMutations';
+import { useSmartPricing } from './useSmartPricing';
 
 interface UseSmartPricingToggleProps {
   productId: string;
@@ -18,6 +19,9 @@ export function useSmartPricingToggle({ productId, productName, onUndoSet }: Use
   const [pendingAction, setPendingAction] = useState<'enable' | 'disable' | null>(null);
   const [priceOptions, setPriceOptions] = useState<{ base: number; last: number } | null>(null);
 
+  // Get context to update product state
+  const { setProductState } = useSmartPricing();
+
   // React Query mutations
   const updateConfigMutation = useUpdatePricingConfig();
   const resumeProductMutation = useResumeProduct();
@@ -29,12 +33,16 @@ export function useSmartPricingToggle({ productId, productName, onUndoSet }: Use
   );
 
   const handleToggle = async (currentEnabled: boolean) => {
+    console.log(`🔘 [${productName}] Toggle clicked - Current state:`, currentEnabled);
+    
     if (currentEnabled) {
       // Turning OFF - show confirmation
+      console.log(`🔴 [${productName}] Turning OFF - showing confirmation dialog`);
       setPendingAction('disable');
       setShowConfirm(true);
     } else {
       // Turning ON - skip confirmation, go directly to resume modal
+      console.log(`🟢 [${productName}] Turning ON - calling API`);
       setPendingAction('enable');
       
       try {
@@ -42,18 +50,28 @@ export function useSmartPricingToggle({ productId, productName, onUndoSet }: Use
           productId,
           auto_pricing_enabled: true,
         });
+        
+        console.log(`✅ [${productName}] API response:`, data);
 
         if (data.showModal) {
           // Show resume modal directly
+          console.log(`📋 [${productName}] Showing resume modal`);
           setPriceOptions({
             base: data.preSmart!,
             last: data.lastSmart!,
           });
           setShowResumeModal(true);
+        } else {
+          // No modal needed - enabled successfully
+          console.log(`✨ [${productName}] No modal needed - updating state immediately`);
+          setProductState(productId, true);
+          setPendingAction(null);
+          toast.success(`Smart pricing enabled for ${productName}`);
         }
       } catch (error) {
+        console.error(`❌ [${productName}] Toggle error:`, error);
         toast.error(error instanceof Error ? error.message : 'Failed to enable smart pricing');
-        console.error('Smart pricing toggle error:', error);
+        setPendingAction(null);
       }
     }
   };
@@ -72,6 +90,9 @@ export function useSmartPricingToggle({ productId, productName, onUndoSet }: Use
         });
 
         if (data.reverted) {
+          // Update local state immediately for instant UI feedback
+          setProductState(productId, false);
+          
           toast.success(`Smart pricing disabled for ${productName}`, {
             description: `Price reverted to $${data.revertedTo!.toFixed(2)}`,
           });
@@ -93,6 +114,7 @@ export function useSmartPricingToggle({ productId, productName, onUndoSet }: Use
   };
 
   const handleResumeConfirm = async (option: ResumeOption) => {
+    console.log(`📝 [${productName}] Resume modal confirmed with option:`, option);
     setShowResumeModal(false);
 
     try {
@@ -100,6 +122,12 @@ export function useSmartPricingToggle({ productId, productName, onUndoSet }: Use
         productId,
         resumeOption: option,
       });
+      
+      console.log(`✅ [${productName}] Resume API response:`, data);
+
+      // Update local state immediately for instant UI feedback
+      console.log(`🔄 [${productName}] Setting product state to TRUE`);
+      setProductState(productId, true);
 
       const optionText = option === 'base' ? 'base price' : 'last smart price';
       toast.success(`Smart pricing enabled for ${productName}`, {
@@ -113,8 +141,10 @@ export function useSmartPricingToggle({ productId, productName, onUndoSet }: Use
       
       return data; // Return data for parent to handle
     } catch (error) {
+      console.error(`❌ [${productName}] Resume error:`, error);
       toast.error(error instanceof Error ? error.message : 'An error occurred');
-      console.error('Smart pricing resume error:', error);
+    } finally {
+      setPendingAction(null);
     }
   };
 

@@ -6,7 +6,7 @@
 //
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Card, CardContent } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
@@ -76,6 +76,15 @@ export function ProductCard({
   const [selectedVariantId, setSelectedVariantId] = useState<string>(product.variants[0]?.id || '');
   const [selectedOption1, setSelectedOption1] = useState<string>('');
   const [showVariants, setShowVariants] = useState(false);
+  
+  // Track local enabled state for immediate UI feedback
+  const [localEnabled, setLocalEnabled] = useState(smartPricingEnabled);
+  
+  // Sync local state with prop changes
+  useEffect(() => {
+    console.log(`🎨 [${product.title}] ProductCard - smartPricingEnabled prop changed to:`, smartPricingEnabled);
+    setLocalEnabled(smartPricingEnabled);
+  }, [smartPricingEnabled, product.title]);
   
   // Use smart pricing toggle hook
   const {
@@ -328,34 +337,29 @@ export function ProductCard({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleToggle(smartPricingEnabled);
+                console.log(`🖱️ [${product.title}] Button clicked - localEnabled:`, localEnabled);
+                handleToggle(localEnabled);
               }}
               disabled={isTogglingSmartPricing}
               className={`relative w-full px-3 py-1.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-md shadow-lg ${
-                !globalSmartPricingEnabled
-                  ? 'bg-orange-500/80 hover:bg-orange-600/80 text-white'
-                  : smartPricingEnabled 
-                    ? 'bg-white/90 hover:bg-white text-gray-900 animate-pulse-subtle' 
-                    : 'bg-black/60 hover:bg-black/70 text-white'
+                localEnabled 
+                  ? 'bg-white/90 hover:bg-white text-gray-900 animate-pulse-subtle' 
+                  : 'bg-black/60 hover:bg-black/70 text-white'
               }`}
             >
               {/* Active glow effect */}
-              {globalSmartPricingEnabled && smartPricingEnabled && (
+              {localEnabled && (
                 <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-blue-500/20 animate-glow-pulse" />
               )}
               <Zap className={`h-3.5 w-3.5 relative z-10 ${
-                !globalSmartPricingEnabled 
-                  ? 'text-white' 
-                  : smartPricingEnabled 
-                    ? 'text-primary animate-pulse' 
-                    : 'text-white'
+                localEnabled 
+                  ? 'text-primary animate-pulse' 
+                  : 'text-white'
               }`} />
               <span className="text-xs relative z-10">
                 {isTogglingSmartPricing 
                   ? 'Updating...' 
-                  : !globalSmartPricingEnabled
-                    ? 'Smart Pricing Paused'
-                    : smartPricingEnabled ? 'Smart Pricing Active' : 'Smart Pricing Off'}
+                  : localEnabled ? 'Smart Pricing Active' : 'Smart Pricing Off'}
               </span>
             </button>
             
@@ -505,6 +509,9 @@ export function ProductCard({
         onOpenChange={setShowConfirm}
         onConfirm={async () => {
           const result = await handleConfirmToggle();
+          // Update local state immediately for instant UI feedback
+          console.log(`✨ [${product.title}] Confirm disable - updating localEnabled to FALSE`);
+          setLocalEnabled(false);
           // Update parent state with new price immediately for smooth UX
           if (result?.revertedTo !== undefined) {
             onSmartPricingToggle?.(false, result.revertedTo);
@@ -520,6 +527,9 @@ export function ProductCard({
         onOpenChange={setShowResumeModal}
         onConfirm={async (option) => {
           const result = await handleResumeConfirm(option);
+          // Update local state immediately for instant UI feedback
+          console.log(`✨ [${product.title}] Resume confirmed - updating localEnabled to TRUE`);
+          setLocalEnabled(true);
           // Update parent state with new price immediately for smooth UX
           if (result?.price !== undefined) {
             onSmartPricingToggle?.(true, result.price);
