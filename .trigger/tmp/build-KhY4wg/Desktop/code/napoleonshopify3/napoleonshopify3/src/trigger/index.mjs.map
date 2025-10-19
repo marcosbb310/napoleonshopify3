@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../../../../../../../../../src/trigger/index.ts"],
-  "sourcesContent": ["// Export all Trigger.dev tasks\nexport * from \"./daily-pricing\";\n\n// Future tasks will be exported here\n// e.g., export * from \"./weekly-reports\";\n\n"],
-  "mappings": ";;;;;;;;;;AAAA;",
-  "names": []
-}

@@ -7,4 +7,5 @@ export * from './DateRangePicker';
 export * from './AppSidebar';
 export * from './AppNavbar';
 export * from './UserMenu';
+export * from './ConnectionStatusBanner';
 export { default as GradientMenu } from './ui/gradient-menu';

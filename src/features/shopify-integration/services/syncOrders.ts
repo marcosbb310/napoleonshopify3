@@ -1,5 +1,5 @@
 // Service to sync orders from Shopify API to Supabase sales_data table
-import { supabaseAdmin } from '@/shared/lib/supabase';
+import { getSupabaseAdmin } from '@/shared/lib/supabase';
 
 interface ShopifyOrder {
   id: string;

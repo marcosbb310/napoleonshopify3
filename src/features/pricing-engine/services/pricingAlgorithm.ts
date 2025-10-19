@@ -1,5 +1,5 @@
 // Simple hill-climbing pricing algorithm - all in one file
-import { supabaseAdmin } from '@/shared/lib/supabase';
+import { getSupabaseAdmin } from '@/shared/lib/supabase';
 
 export interface AlgorithmResult {
   success: boolean;
@@ -20,6 +20,7 @@ export async function runPricingAlgorithm(): Promise<AlgorithmResult> {
   const errors: string[] = [];
 
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     // Check if global smart pricing is enabled
     const { data: globalSetting } = await supabaseAdmin
       .from('global_settings')
@@ -53,7 +54,7 @@ export async function runPricingAlgorithm(): Promise<AlgorithmResult> {
       const config = Array.isArray(row.pricing_config) ? row.pricing_config[0] : row.pricing_config;
       
       try {
-        await processProduct(row, config, stats);
+        await processProduct(row, config, stats, supabaseAdmin);
       } catch (error) {
         errors.push(`${row.title}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
@@ -82,7 +83,7 @@ export async function runPricingAlgorithm(): Promise<AlgorithmResult> {
 /**
  * Process a single product
  */
-async function processProduct(product: any, config: any, stats: any) {
+async function processProduct(product: any, config: any, stats: any, supabaseAdmin: any) {
   const now = new Date();
 
   // Step 1: Check if waiting after revert

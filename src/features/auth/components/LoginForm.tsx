@@ -89,6 +89,10 @@ export function LoginForm() {
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? 'Signing in...' : 'Sign In'}
           </Button>
+          
+          <p className="text-xs text-muted-foreground text-center mt-4">
+            Development Mode: Any email/password will work for testing
+          </p>
         </form>
       </CardContent>
     </Card>

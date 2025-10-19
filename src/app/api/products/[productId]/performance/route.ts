@@ -1,6 +1,6 @@
 // API endpoint to fetch product performance data
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/shared/lib/supabase';
+import { getSupabaseAdmin } from '@/shared/lib/supabase';
 
 export async function GET(
   request: NextRequest,

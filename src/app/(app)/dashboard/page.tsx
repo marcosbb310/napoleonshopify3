@@ -68,20 +68,20 @@ export default function DashboardPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
-            Your smart pricing is actively optimizing {metrics.optimizedProducts} products
-          </p>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-sm text-muted-foreground">
+              Your smart pricing is actively optimizing {metrics.optimizedProducts} products
+            </p>
+          </div>
+          <DateRangePicker
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+          />
         </div>
-        <DateRangePicker
-          dateRange={dateRange}
-          onDateRangeChange={setDateRange}
-        />
-      </div>
 
-      {/* Top Metrics Row */}
-      <div className="grid gap-4 md:grid-cols-3">
+        {/* Top Metrics Row */}
+        <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-2 border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 dark:from-emerald-950 dark:via-green-950 dark:to-teal-950">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-sm font-medium text-emerald-900 dark:text-emerald-100">

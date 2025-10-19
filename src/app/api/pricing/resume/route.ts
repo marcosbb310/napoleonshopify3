@@ -1,6 +1,6 @@
 // Resume smart pricing with user's choice
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/shared/lib/supabase';
+import { getSupabaseAdmin } from '@/shared/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {

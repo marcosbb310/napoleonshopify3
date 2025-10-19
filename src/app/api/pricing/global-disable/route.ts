@@ -1,9 +1,10 @@
 // Disable smart pricing globally for all products
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/shared/lib/supabase';
+import { getSupabaseAdmin } from '@/shared/lib/supabase';
 
 export async function POST() {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     // Get all products with smart pricing enabled
     const { data: products, error } = await supabaseAdmin
       .from('products')

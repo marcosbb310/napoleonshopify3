@@ -1,6 +1,6 @@
 // API endpoints for pricing configuration management
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/shared/lib/supabase';
+import { getSupabaseAdmin } from '@/shared/lib/supabase';
 
 // GET pricing config for a product
 export async function GET(

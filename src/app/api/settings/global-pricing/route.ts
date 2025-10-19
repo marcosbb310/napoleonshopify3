@@ -1,6 +1,6 @@
 // API endpoint for global smart pricing setting
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/shared/lib/supabase';
+import { getSupabaseAdmin } from '@/shared/lib/supabase';
 
 /**
  * GET /api/settings/global-pricing
@@ -8,6 +8,7 @@ import { supabaseAdmin } from '@/shared/lib/supabase';
  */
 export async function GET() {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const { data, error } = await supabaseAdmin
       .from('global_settings')
       .select('value')
@@ -77,6 +78,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const supabaseAdmin = getSupabaseAdmin();
     const { error } = await supabaseAdmin
       .from('global_settings')
       .update({ value: enabled })

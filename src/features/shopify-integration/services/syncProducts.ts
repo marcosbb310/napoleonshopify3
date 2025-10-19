@@ -1,5 +1,5 @@
 // Service to sync products from Shopify API to Supabase database
-import { supabaseAdmin } from '@/shared/lib/supabase';
+import { getSupabaseAdmin } from '@/shared/lib/supabase';
 
 interface ShopifyProduct {
   id: string;

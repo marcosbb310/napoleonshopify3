@@ -1,9 +1,10 @@
 // API endpoint to check current pricing config values
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/shared/lib/supabase';
+import { getSupabaseAdmin } from '@/shared/lib/supabase';
 
 export async function GET() {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const { data, error } = await supabaseAdmin
       .from('pricing_config')
       .select('product_id, revenue_drop_threshold, wait_hours_after_revert, current_state, last_price_change_date, next_price_change_date');

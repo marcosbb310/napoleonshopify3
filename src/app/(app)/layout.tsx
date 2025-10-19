@@ -3,15 +3,17 @@
 
 import React, { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { AuthSkeleton, AuthInitSkeleton, AppNavbar } from '@/shared/components';
+import { AuthSkeleton, AuthInitSkeleton, AppNavbar, ConnectionStatusBanner } from '@/shared/components';
 import { useAuth, useAuthHydration } from '@/features/auth';
+import { useStoreConnection } from '@/features/shopify-integration/hooks/useStoreConnection';
 import { Toaster } from '@/shared/components/ui/sonner';
 import { SmartPricingProvider } from '@/features/pricing-engine';
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, isLoading, isInitialized } = useAuth();
+  const { isAuthenticated, isLoading, isInitialized, currentStore } = useAuth();
+  const { isConnected, isLoading: isConnectionLoading } = useStoreConnection();
   
   // Handle auth hydration to prevent hydration mismatch
   useAuthHydration();
@@ -56,6 +58,15 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col">
       <AppNavbar />
+      <ConnectionStatusBanner 
+        isConnected={isConnected}
+        isLoading={isConnectionLoading}
+        storeName={currentStore?.shop_domain}
+        onReconnect={() => {
+          // Redirect to settings page or trigger re-auth
+          window.location.href = '/settings';
+        }}
+      />
       <main className="flex-1 container mx-auto px-4 py-6">
         {children}
       </main>
