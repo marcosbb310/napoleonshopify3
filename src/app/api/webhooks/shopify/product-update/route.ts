@@ -65,6 +65,9 @@ export async function POST(request: NextRequest) {
     const nextPriceChangeDate = new Date();
     nextPriceChangeDate.setDate(nextPriceChangeDate.getDate() + 2);
 
+    // Initialize Supabase admin client
+    const supabaseAdmin = createAdminClient();
+
     // Update pricing_config in database
     const { data, error } = await supabaseAdmin
       .from('pricing_config')
