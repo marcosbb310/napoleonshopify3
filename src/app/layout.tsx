@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider, QueryProvider } from "@/shared/components";
 import { Toaster } from "@/shared/components/ui/sonner";
+// Environment validation is handled in middleware and API routes
+// No need to validate in layout as it can cause SSR issues
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

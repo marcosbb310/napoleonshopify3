@@ -46,10 +46,19 @@ export function SmartPricingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadGlobalState = async () => {
       try {
+        // Only run on client side
+        if (typeof window === 'undefined') return;
+        
         console.log('🔄 Loading global pricing state from Supabase...');
         const response = await fetch('/api/settings/global-pricing');
+        
+        if (!response.ok) {
+          console.warn('⚠️ Failed to fetch global pricing state:', response.status, response.statusText);
+          return;
+        }
+        
         const data = await response.json();
-        if (data.enabled !== undefined) {
+        if (data && typeof data === 'object' && data.enabled !== undefined) {
           console.log('✅ Loaded global pricing state from Supabase:', data.enabled);
           console.log('🎨 PowerButton should now be:', data.enabled ? 'GREEN (ON)' : 'GREY (OFF)');
           setGlobalEnabledState(data.enabled);

@@ -67,6 +67,8 @@ export default function ProductsPage() {
   // Undo state management
   const { canUndo, formatTimeRemaining, setUndo, executeUndo, undoState } = useUndoState();
   
+  // Product updates state - must be declared before useEffect that uses it
+  const [productUpdates, setProductUpdates] = useState<Map<string, Partial<ProductWithPricing['pricing']>>>(new Map());
 
   // Get all products (no loading state for filtering/searching)
   const { products: allProducts, loading, error, refetch } = useProducts();
@@ -113,15 +115,13 @@ export default function ProductsPage() {
       setGlobalSnapshots(null);
     }
   }, [globalSnapshots, globalEnabled, setUndo, setProductUpdates, setGlobalSnapshots]);
-  
-  const [productUpdates, setProductUpdates] = useState<Map<string, Partial<ProductWithPricing['pricing']>>>(new Map());
   const [lastBulkAction, setLastBulkAction] = useState<{
     updates: Map<string, Partial<ProductWithPricing['pricing']>>;
     description: string;
   } | null>(null);
 
-  // Apply any pending updates to products
-  const applyUpdatesToProducts = (productList: ProductWithPricing[]) => {
+  // Apply any pending updates to products - memoized to prevent recreation
+  const applyUpdatesToProducts = useCallback((productList: ProductWithPricing[]) => {
     if (productUpdates.size === 0) return productList;
     
     return productList.map(product => {
@@ -140,7 +140,7 @@ export default function ProductsPage() {
         pricing: updatedPricing,
       };
     });
-  };
+  }, [productUpdates]);
 
   // Check for bulkEdit URL parameter and open dialog if present
   useEffect(() => {
@@ -202,7 +202,7 @@ export default function ProductsPage() {
           const title = product.title.toLowerCase();
           const vendor = product.vendor.toLowerCase();
           const productType = product.productType.toLowerCase();
-          const tags = product.tags.map(t => t.toLowerCase());
+          const tags = product.tags.map((t: string) => t.toLowerCase());
           
           let score = 0;
           
@@ -218,11 +218,11 @@ export default function ProductsPage() {
           }
           
           // Tag scoring (independent of title)
-          if (tags.some(tag => tag === query)) {
+          if (tags.some((tag: string) => tag === query)) {
             score += 150;
-          } else if (tags.some(tag => tag.startsWith(query))) {
+          } else if (tags.some((tag: string) => tag.startsWith(query))) {
             score += 100;
-          } else if (tags.some(tag => tag.includes(query))) {
+          } else if (tags.some((tag: string) => tag.includes(query))) {
             score += 75;
           }
           
@@ -279,7 +279,7 @@ export default function ProductsPage() {
     }
 
     return filtered;
-  }, [allProducts, searchQuery, selectedTags, filter, productUpdates]);
+  }, [allProducts, searchQuery, selectedTags, filter, applyUpdatesToProducts]);
 
   const handleUpdatePricing = (productId: string, pricing: { basePrice?: number; cost?: number; maxPrice?: number; currentPrice?: number }) => {
     console.log('Updating pricing for product:', productId, pricing);

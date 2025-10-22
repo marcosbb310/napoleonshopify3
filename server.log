@@ -1,0 +1,19 @@
+
+> napoleonshopify3@0.1.0 dev
+> NODE_OPTIONS='--dns-result-order=ipv4first' next dev
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Users/marcosbb310/Desktop/code/napoleonshopify3/package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * /Users/marcosbb310/Desktop/code/napoleonshopify3/napoleonshopify3/package-lock.json
+
+   ▲ Next.js 15.5.4
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.1.165:3000
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1256ms
+[?25h

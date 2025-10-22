@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/shared/lib/supabase';
+import { logger } from '@/shared/lib/logger';
 import crypto from 'crypto';
 
 /**
@@ -28,38 +29,47 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Get webhook signature from headers
-    const hmac = request.headers.get('x-shopify-hmac-sha256');
     const body = await request.text();
     
-    // Verify webhook authenticity
-    if (process.env.SHOPIFY_WEBHOOK_SECRET) {
-      const hash = crypto
-        .createHmac('sha256', process.env.SHOPIFY_WEBHOOK_SECRET)
-        .update(body, 'utf8')
-        .digest('base64');
-      
-      if (hash !== hmac) {
-        console.error('❌ Invalid webhook signature');
-        return NextResponse.json(
-          { error: 'Invalid webhook signature' }, 
-          { status: 401 }
-        );
-      }
+    // MANDATORY webhook verification
+    const WEBHOOK_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET;
+    if (!WEBHOOK_SECRET) {
+      logger.error('SHOPIFY_WEBHOOK_SECRET not configured');
+      return NextResponse.json(
+        { error: 'Server misconfigured' }, 
+        { status: 500 }
+      );
+    }
+
+    const hmac = request.headers.get('x-shopify-hmac-sha256');
+    const hash = crypto
+      .createHmac('sha256', WEBHOOK_SECRET)
+      .update(body, 'utf8')
+      .digest('base64');
+
+    if (hash !== hmac) {
+      logger.error('Invalid webhook signature');
+      return NextResponse.json(
+        { error: 'Invalid webhook signature' }, 
+        { status: 401 }
+      );
     }
 
     // Parse product data
     const product = JSON.parse(body);
-    console.log(`📦 Product update webhook received: ${product.title} (ID: ${product.id})`);
+    const webhookId = request.headers.get('x-shopify-webhook-id');
+    logger.info(`Product update webhook received: ${product.title} (ID: ${product.id})`, {
+      webhookId,
+    });
 
     // Extract new price from first variant
     if (!product.variants || product.variants.length === 0) {
-      console.warn('⚠️ No variants found in product');
+      logger.warn('No variants found in product', { webhookId });
       return NextResponse.json({ warning: 'No variants found' });
     }
 
     const newPrice = parseFloat(product.variants[0].price);
-    console.log(`💰 New price detected: $${newPrice}`);
+    logger.info(`New price detected: $${newPrice}`, { webhookId });
 
     // Calculate next price change date (today + 2 days)
     const nextPriceChangeDate = new Date();
@@ -67,6 +77,48 @@ export async function POST(request: NextRequest) {
 
     // Initialize Supabase admin client
     const supabaseAdmin = createAdminClient();
+
+    // Check if webhook already processed (idempotency)
+    const webhookId = request.headers.get('x-shopify-webhook-id');
+    const storeDomain = request.headers.get('x-shopify-shop-domain');
+
+    if (!webhookId || !storeDomain) {
+      return NextResponse.json({ error: 'Missing webhook headers' }, { status: 400 });
+    }
+
+    // Get store ID from domain
+    const { data: store } = await supabaseAdmin
+      .from('stores')
+      .select('id')
+      .eq('shop_domain', storeDomain)
+      .single();
+
+    if (!store) {
+      return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+    }
+
+    // Check if webhook already processed
+    const { data: existingWebhook } = await supabaseAdmin
+      .from('processed_webhooks')
+      .select('id')
+      .eq('webhook_id', webhookId)
+      .eq('store_id', store.id)
+      .single();
+
+    if (existingWebhook) {
+      logger.info(`Webhook ${webhookId} already processed, skipping`, { webhookId, storeId: store.id });
+      return NextResponse.json({ message: 'Already processed' });
+    }
+
+    // Mark webhook as processed
+    await supabaseAdmin
+      .from('processed_webhooks')
+      .insert({
+        webhook_id: webhookId,
+        store_id: store.id,
+        topic: 'products/update',
+        payload_hash: crypto.createHash('sha256').update(body).digest('hex'),
+      });
 
     // Update pricing_config in database
     const { data, error } = await supabaseAdmin
@@ -80,7 +132,7 @@ export async function POST(request: NextRequest) {
       .select();
 
     if (error) {
-      console.error('❌ Database update failed:', error);
+      logger.error('Database update failed', error as Error, { webhookId, storeId: store.id });
       return NextResponse.json(
         { error: error.message }, 
         { status: 500 }
@@ -88,14 +140,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (!data || data.length === 0) {
-      console.warn(`⚠️ No pricing config found for product ${product.id}`);
+      logger.warn(`No pricing config found for product ${product.id}`, { webhookId, storeId: store.id });
       return NextResponse.json({ 
         warning: 'Product not in smart pricing system' 
       });
     }
 
-    console.log(`✅ Pricing cycle reset for product ${product.id}`);
-    console.log(`📅 Next price change: ${nextPriceChangeDate.toISOString()}`);
+    logger.info(`Pricing cycle reset for product ${product.id}`, { webhookId, storeId: store.id });
+    logger.info(`Next price change: ${nextPriceChangeDate.toISOString()}`, { webhookId, storeId: store.id });
 
     return NextResponse.json({
       success: true,
@@ -105,7 +157,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ Webhook processing error:', error);
+    logger.error('Webhook processing error', error as Error);
     return NextResponse.json(
       { 
         error: error instanceof Error ? error.message : 'Unknown error' 

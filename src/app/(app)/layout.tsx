@@ -18,9 +18,11 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
 
   // Save the current page on refresh/load for potential redirect after login
   useEffect(() => {
-    const currentPath = window.location.pathname;
-    if (currentPath !== '/') {
-      sessionStorage.setItem('intended-page', currentPath);
+    if (typeof window !== 'undefined') {
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/') {
+        sessionStorage.setItem('intended-page', currentPath);
+      }
     }
   }, []);
 
@@ -28,9 +30,11 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       // Save the current page before redirecting so user can return to it after login
-      const currentPath = window.location.pathname;
-      if (currentPath !== '/') {
-        sessionStorage.setItem('intended-page', currentPath);
+      if (typeof window !== 'undefined') {
+        const currentPath = window.location.pathname;
+        if (currentPath !== '/') {
+          sessionStorage.setItem('intended-page', currentPath);
+        }
       }
       router.push('/');
     }
@@ -56,7 +60,11 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
         storeName={currentStore?.shop_domain}
         onReconnect={() => {
           // Redirect to settings page or trigger re-auth
-          window.location.href = '/settings';
+          if (typeof window !== 'undefined') {
+            window.location.href = '/settings';
+          } else {
+            router.push('/settings');
+          }
         }}
       />
       <main className="flex-1 container mx-auto px-4 py-6">

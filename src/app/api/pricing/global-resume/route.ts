@@ -111,8 +111,8 @@ export async function POST(request: NextRequest) {
 }
 
 async function updateShopifyPrice(shopifyId: string, newPrice: number) {
-  const storeUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL || process.env.SHOPIFY_STORE_URL;
-  const accessToken = process.env.SHOPIFY_ACCESS_TOKEN || process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
+  const storeUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL;
+  const accessToken = process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
   const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
 
   if (!storeUrl || !accessToken) return;

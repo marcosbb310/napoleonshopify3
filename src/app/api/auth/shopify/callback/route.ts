@@ -2,6 +2,103 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAdminClient, createRouteHandlerClient } from '@/shared/lib/supabase'
 
+async function registerWebhooks(shopDomain: string, accessToken: string) {
+  const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
+  const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/shopify/product-update`;
+  const baseUrl = `https://${shopDomain}/admin/api/${apiVersion}`;
+  
+  // Step 1: Check for existing webhooks
+  const existingResponse = await fetch(`${baseUrl}/webhooks.json`, {
+    headers: {
+      'X-Shopify-Access-Token': accessToken,
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  if (!existingResponse.ok) {
+    throw new Error(`Failed to fetch existing webhooks: ${existingResponse.status}`);
+  }
+  
+  const { webhooks } = await existingResponse.json();
+  
+  // Step 2: Check if webhook already exists
+  const existingWebhook = webhooks?.find((w: any) => 
+    w.topic === 'products/update' && w.address === webhookUrl
+  );
+  
+  if (existingWebhook) {
+    console.log('Webhook already registered:', existingWebhook.id);
+    return; // Skip registration
+  }
+  
+  // Step 3: Register new webhook
+  const registerResponse = await fetch(`${baseUrl}/webhooks.json`, {
+    method: 'POST',
+    headers: {
+      'X-Shopify-Access-Token': accessToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      webhook: {
+        topic: 'products/update',
+        address: webhookUrl,
+        format: 'json',
+      },
+    }),
+  });
+  
+  if (!registerResponse.ok) {
+    const error = await registerResponse.json();
+    throw new Error(`Failed to register webhook: ${JSON.stringify(error)}`);
+  }
+  
+  const { webhook } = await registerResponse.json();
+  console.log('Webhook registered successfully:', webhook.id);
+}
+
+async function triggerProductSync(storeId: string, shopDomain: string, accessToken: string) {
+  // Update sync status to in_progress
+  const supabaseAdmin = createAdminClient();
+  await supabaseAdmin
+    .from('sync_status')
+    .upsert({
+      store_id: storeId,
+      status: 'in_progress',
+      products_synced: 0,
+      total_products: 0,
+      started_at: new Date().toISOString(),
+    });
+
+  // Call sync service directly (not HTTP request to avoid auth issues)
+  const { syncProductsFromShopify } = await import('@/features/shopify-integration/services/syncProducts');
+  
+  try {
+    const result = await syncProductsFromShopify(storeId, shopDomain, accessToken);
+    
+    // Update sync status
+    await supabaseAdmin
+      .from('sync_status')
+      .update({
+        status: result.success ? 'completed' : 'failed',
+        products_synced: result.synced,
+        completed_at: new Date().toISOString(),
+        error_message: result.errors.length > 0 ? result.errors.join('; ') : null,
+      })
+      .eq('store_id', storeId);
+      
+  } catch (error) {
+    // Update sync status to failed
+    await supabaseAdmin
+      .from('sync_status')
+      .update({
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+      })
+      .eq('store_id', storeId);
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Check if user is authenticated
@@ -112,6 +209,7 @@ export async function GET(request: NextRequest) {
       .eq('user_id', userProfile.id)
       .single()
 
+    let storeId: string;
     if (existingStore) {
       // Update existing store
       await supabaseAdmin
@@ -124,9 +222,10 @@ export async function GET(request: NextRequest) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingStore.id)
+      storeId = existingStore.id;
     } else {
       // Create new store
-      await supabaseAdmin
+      const { data: newStore } = await supabaseAdmin
         .from('stores')
         .insert({
           user_id: userProfile.id,
@@ -136,6 +235,25 @@ export async function GET(request: NextRequest) {
           installed_at: new Date().toISOString(),
           is_active: true,
         })
+        .select('id')
+        .single()
+      storeId = newStore!.id;
+    }
+
+    // Register product update webhook (with duplicate check and error handling)
+    try {
+      await registerWebhooks(shopDomain, access_token);
+    } catch (error) {
+      console.error('Webhook registration failed:', error);
+      // Don't fail OAuth - webhook can be registered manually
+    }
+
+    // Trigger automatic product sync in background
+    try {
+      await triggerProductSync(storeId, shopDomain, access_token);
+    } catch (error) {
+      console.error('Auto-sync failed:', error);
+      // Don't fail OAuth - user can sync manually
     }
 
     // Close the popup window

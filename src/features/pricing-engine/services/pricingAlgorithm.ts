@@ -16,17 +16,25 @@ interface ProductRow {
   id: string;
   title: string;
   shopify_id: string;
+  starting_price: number;
   current_price: number;
   pricing_config: PricingConfig | PricingConfig[];
 }
 
 interface PricingConfig {
   current_state: string;
+  auto_pricing_enabled?: boolean;
+  increment_percentage?: number;
+  period_hours?: number;
+  revenue_drop_threshold?: number;
+  wait_hours_after_revert?: number;
+  max_increase_percentage?: number;
+  last_price_change_date?: string;
   revert_wait_until_date?: string;
+  next_price_change_date?: string;
   max_price_cap?: number;
   current_price?: number;
   base_price?: number;
-  last_price_change_date?: string;
   price_change_frequency_hours?: number;
 }
 
@@ -140,13 +148,14 @@ async function processProduct(product: ProductRow, config: PricingConfig, stats:
   }
 
   // Step 4: Get revenue data
-  const revenue = await getRevenue(product.id, config.period_hours);
+  const periodHours = config.period_hours ?? 24;
+  const revenue = await getRevenue(product.id, periodHours);
 
   // Step 5: Decide what to do
   if (!revenue.hasSufficientData) {
     // First increase - no data yet
-    await increasePrice(product, config, stats, null, shopDomain, accessToken, storeId);
-  } else if (revenue.changePercent < -config.revenue_drop_threshold) {
+    await increasePrice(product, config, stats, {} as RevenueData, shopDomain, accessToken, storeId);
+  } else if (revenue.changePercent < -(config.revenue_drop_threshold || 1.0)) {
     // Revenue dropped - revert
     await revertPrice(product, config, stats, revenue, shopDomain, accessToken, storeId);
   } else {
@@ -189,14 +198,14 @@ async function getRevenue(productId: string, periodHours: number) {
 /**
  * Increase price
  */
-async function increasePrice(product: ProductRow, config: PricingConfig, stats: AlgorithmStats, revenue: RevenueData, shopDomain: string, accessToken: string, storeId: string) {
+async function increasePrice(product: ProductRow, config: PricingConfig, stats: AlgorithmStats, revenue: RevenueData | null, shopDomain: string, accessToken: string, storeId: string) {
   const supabaseAdmin = createAdminClient();
-  const newPrice = product.current_price * (1 + config.increment_percentage / 100);
+  const newPrice = product.current_price * (1 + (config.increment_percentage || 5.0) / 100);
   const percentIncrease = ((newPrice - product.starting_price) / product.starting_price) * 100;
 
   // Check max cap
-  if (percentIncrease > config.max_increase_percentage) {
-    const maxPrice = product.starting_price * (1 + config.max_increase_percentage / 100);
+  if (percentIncrease > (config.max_increase_percentage || 100.0)) {
+    const maxPrice = product.starting_price * (1 + (config.max_increase_percentage || 100.0) / 100);
     await updatePrice(product, config, maxPrice, 'increase', 'Hit max cap', revenue, shopDomain, accessToken, storeId);
     await supabaseAdmin
       .from('pricing_config')
@@ -206,7 +215,7 @@ async function increasePrice(product: ProductRow, config: PricingConfig, stats: 
     return;
   }
 
-  await updatePrice(product, config, newPrice, 'increase', revenue ? `Revenue ${revenue.changePercent >= 0 ? 'up' : 'stable'}` : 'First increase', revenue, shopDomain, accessToken, storeId);
+  await updatePrice(product, config, newPrice, 'increase', revenue ? `Revenue ${(revenue as any).changePercent >= 0 ? 'up' : 'stable'}` : 'First increase', revenue, shopDomain, accessToken, storeId);
   stats.increased++;
 }
 
@@ -228,11 +237,11 @@ async function revertPrice(product: ProductRow, config: PricingConfig, stats: Al
 
   const previousPrice = history?.old_price || product.starting_price;
 
-  await updatePrice(product, config, previousPrice, 'revert', `Revenue dropped ${revenue.changePercent.toFixed(1)}%`, revenue, shopDomain, accessToken, storeId);
+  await updatePrice(product, config, previousPrice, 'revert', `Revenue dropped ${(revenue as any).changePercent.toFixed(1)}%`, revenue, shopDomain, accessToken, storeId);
 
   // Set waiting state (updatePrice already set next_price_change_date)
   const waitUntil = new Date();
-  waitUntil.setHours(waitUntil.getHours() + config.wait_hours_after_revert);
+  waitUntil.setHours(waitUntil.getHours() + (config.wait_hours_after_revert || 24));
   await supabaseAdmin
     .from('pricing_config')
     .update({
@@ -248,7 +257,7 @@ async function revertPrice(product: ProductRow, config: PricingConfig, stats: Al
 /**
  * Update price in Shopify and database
  */
-async function updatePrice(product: ProductRow, config: PricingConfig, newPrice: number, action: string, reason: string, revenue: RevenueData, shopDomain: string, accessToken: string, storeId: string) {
+async function updatePrice(product: ProductRow, config: PricingConfig, newPrice: number, action: string, reason: string, revenue: RevenueData | null, shopDomain: string, accessToken: string, storeId: string) {
   const supabaseAdmin = createAdminClient();
   
   // Update Shopify
@@ -261,7 +270,7 @@ async function updatePrice(product: ProductRow, config: PricingConfig, newPrice:
     .eq('id', product.id);
 
   const now = new Date();
-  const nextChange = new Date(now.getTime() + config.period_hours * 60 * 60 * 1000);
+  const nextChange = new Date(now.getTime() + (config.period_hours || 24) * 60 * 60 * 1000);
   
   await supabaseAdmin
     .from('pricing_config')

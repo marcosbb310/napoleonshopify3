@@ -4,6 +4,7 @@ import type {
   ShopifyCredentials, 
   ShopifyApiResponse 
 } from '../types';
+import { shopifyRateLimiter } from '@/shared/lib/rateLimiter';
 
 export class ShopifyClient {
   private baseUrl: string;
@@ -27,41 +28,43 @@ export class ShopifyClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ShopifyApiResponse<T>> {
-    try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': this.accessToken,
-          ...options.headers,
-        },
-      });
+    return shopifyRateLimiter.execute(async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}${endpoint}`, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': this.accessToken,
+            ...options.headers,
+          },
+        });
 
-      if (!response.ok) {
-        const error = await response.json();
+        if (!response.ok) {
+          const error = await response.json();
+          return {
+            success: false,
+            error: {
+              message: error.errors || 'API request failed',
+              statusCode: response.status,
+            },
+          };
+        }
+
+        const data = await response.json();
+        return {
+          success: true,
+          data,
+        };
+      } catch (error) {
         return {
           success: false,
           error: {
-            message: error.errors || 'API request failed',
-            statusCode: response.status,
+            message: error instanceof Error ? error.message : 'Unknown error',
+            statusCode: 500,
           },
         };
       }
-
-      const data = await response.json();
-      return {
-        success: true,
-        data,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: {
-          message: error instanceof Error ? error.message : 'Unknown error',
-          statusCode: 500,
-        },
-      };
-    }
+    });
   }
 
   async getProducts(): Promise<ShopifyApiResponse<ShopifyProduct[]>> {

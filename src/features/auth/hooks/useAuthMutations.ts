@@ -147,7 +147,7 @@ export function useMagicLink() {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
+          emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/dashboard`,
         },
       })
       if (error) throw error
@@ -167,7 +167,7 @@ export function usePasswordReset() {
   return useMutation({
     mutationFn: async ({ email }: { email: string }) => {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/update-password`,
+        redirectTo: `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/auth/update-password`,
       })
       if (error) throw error
     },

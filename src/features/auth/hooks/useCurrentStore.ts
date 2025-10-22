@@ -13,9 +13,13 @@ export function useCurrentStore() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     
-    const saved = localStorage.getItem('selected-store-id')
-    if (saved) {
-      setStoreId(saved)
+    try {
+      const saved = localStorage.getItem('selected-store-id')
+      if (saved) {
+        setStoreId(saved)
+      }
+    } catch (error) {
+      console.warn('Failed to access localStorage:', error)
     }
   }, [])
 
@@ -26,14 +30,26 @@ export function useCurrentStore() {
     // If we have a storeId but it's not in the list, clear it
     if (storeId && !stores.find(s => s.id === storeId)) {
       setStoreId(null)
-      localStorage.removeItem('selected-store-id')
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('selected-store-id')
+        } catch (error) {
+          console.warn('Failed to remove from localStorage:', error)
+        }
+      }
     }
     
     // If no store selected, select the first one
     if (!storeId && stores.length > 0) {
       const firstStore = stores[0]
       setStoreId(firstStore.id)
-      localStorage.setItem('selected-store-id', firstStore.id)
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('selected-store-id', firstStore.id)
+        } catch (error) {
+          console.warn('Failed to save to localStorage:', error)
+        }
+      }
     }
   }, [stores, storeId])
 
@@ -41,7 +57,13 @@ export function useCurrentStore() {
 
   const switchStore = useMutation({
     mutationFn: async (newStoreId: string) => {
-      localStorage.setItem('selected-store-id', newStoreId)
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('selected-store-id', newStoreId)
+        } catch (error) {
+          console.warn('Failed to save to localStorage:', error)
+        }
+      }
       return newStoreId
     },
     onSuccess: (newStoreId) => {

@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '@/features/auth';
+import { useCurrentStore } from '@/features/auth';
 
 export function useStoreConnection() {
-  const { currentStore } = useAuth();
+  const { currentStore } = useCurrentStore();
   
   const { data: isValid, isLoading, error } = useQuery({
     queryKey: ['store-connection', currentStore?.id],
