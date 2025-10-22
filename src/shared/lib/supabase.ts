@@ -37,10 +37,10 @@ export function createRouteHandlerClient(request: NextRequest) {
       get(name: string) {
         return request.cookies.get(name)?.value
       },
-      set(name: string, value: string, options: any) {
+      set(name: string, value: string, options: Record<string, unknown>) {
         request.cookies.set({ name, value, ...options })
       },
-      remove(name: string, options: any) {
+      remove(name: string, options: Record<string, unknown>) {
         request.cookies.set({ name, value: '', ...options })
       },
     },
@@ -49,17 +49,17 @@ export function createRouteHandlerClient(request: NextRequest) {
 
 // Middleware Client
 export function createMiddlewareClient(request: NextRequest) {
-  let response = NextResponse.next({ request })
+  const response = NextResponse.next({ request })
   
   const supabase = createSSRServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       get(name: string) {
         return request.cookies.get(name)?.value
       },
-      set(name: string, value: string, options: any) {
+      set(name: string, value: string, options: Record<string, unknown>) {
         response.cookies.set({ name, value, ...options })
       },
-      remove(name: string, options: any) {
+      remove(name: string, options: Record<string, unknown>) {
         response.cookies.set({ name, value: '', ...options })
       },
     },

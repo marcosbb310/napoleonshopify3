@@ -6,10 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/shared/components/ui/chart';
 import { Badge } from '@/shared/components/ui/badge';
-import { DollarSign, TrendingUp, TrendingDown, Package, AlertTriangle, CheckCircle2, ArrowUpRight, ArrowDownRight, Activity, LayoutDashboard, BarChart3, Settings, HelpCircle } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Package, AlertTriangle, CheckCircle2, ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
 import { DashboardSkeleton, DateRangePicker } from '@/shared/components';
 import { useAuth } from '@/features/auth';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { useRouter } from 'next/navigation';
 import { DateRange } from 'react-day-picker';
 import { addDays, format } from 'date-fns';

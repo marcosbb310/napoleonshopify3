@@ -19,7 +19,7 @@ export default function HomePage() {
             Coming Soon
           </h2>
           <p className="text-lg text-muted-foreground">
-            We're putting the finishing touches on something amazing.
+            We&apos;re putting the finishing touches on something amazing.
           </p>
           <p className="text-sm text-muted-foreground">
             Stay tuned for updates!

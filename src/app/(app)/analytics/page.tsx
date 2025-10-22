@@ -18,9 +18,6 @@ import {
   ArrowUp,
   ArrowDown,
   Minus,
-  Edit3,
-  Check,
-  X,
   Search,
   Activity,
   CheckCircle2,
@@ -33,9 +30,7 @@ import { useSearchParams } from 'next/navigation';
 export default function AnalyticsPage() {
   const searchParams = useSearchParams();
   // State for inline price editing
-  const [editingPrice, setEditingPrice] = useState<string | null>(null);
   const [editedPrices, setEditedPrices] = useState<Record<string, string>>({});
-  const [priceUpdateStatus, setPriceUpdateStatus] = useState<Record<string, 'saving' | 'success' | 'error'>>({});
   
   // State for ranking view options
   const ITEMS_PER_PAGE = 10; // Fixed items per page
@@ -355,68 +350,47 @@ export default function AnalyticsPage() {
       .map(item => item.product); // Extract products
     
     return scoredProducts;
-  }, [searchQuery]);
+  }, [searchQuery, individualProducts]);
 
-  // Price editing helper functions
-  const handleEditPrice = (productId: string, currentPrice: number) => {
-    setEditingPrice(productId);
-    setEditedPrices(prev => ({
-      ...prev,
-      [productId]: currentPrice.toString()
-    }));
-  };
+  // Price editing helper functions (currently unused but kept for future functionality)
+  // const handleEditPrice = (productId: string, currentPrice: number) => {
+  //   setEditedPrices(prev => ({
+  //     ...prev,
+  //     [productId]: currentPrice.toString()
+  //   }));
+  // };
 
-  const handleSavePrice = async (productId: string) => {
-    const newPrice = editedPrices[productId];
-    if (newPrice && parseFloat(newPrice) > 0) {
-      // Set saving status
-      setPriceUpdateStatus(prev => ({ ...prev, [productId]: 'saving' }));
-      
-      try {
-        // TODO: Implement actual price update via Shopify API
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
+  // const handleSavePrice = async (productId: string) => {
+  //   const newPrice = editedPrices[productId];
+  //   if (newPrice && parseFloat(newPrice) > 0) {
+  //     try {
+  //       // TODO: Implement actual price update via Shopify API
+  //       // Simulate API call
+  //       await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Set success status
-        setPriceUpdateStatus(prev => ({ ...prev, [productId]: 'success' }));
-        setEditingPrice(null);
+  //       // Clear edited price after successful save
+  //       setEditedPrices(prev => {
+  //         const updated = { ...prev };
+  //         delete updated[productId];
+  //         return updated;
+  //       });
         
-        // Clear success status after 2 seconds
-        setTimeout(() => {
-          setPriceUpdateStatus(prev => {
-            const updated = { ...prev };
-            delete updated[productId];
-            return updated;
-          });
-        }, 2000);
-        
-      } catch (error) {
-        // Set error status
-        setPriceUpdateStatus(prev => ({ ...prev, [productId]: 'error' }));
-        
-        // Clear error status after 3 seconds
-        setTimeout(() => {
-          setPriceUpdateStatus(prev => {
-            const updated = { ...prev };
-            delete updated[productId];
-            return updated;
-          });
-        }, 3000);
-      }
-    }
-  };
+  //     } catch (error) {
+  //       console.error('Failed to save price:', error);
+  //     }
+  //   }
+  // };
 
-  const handleCancelEdit = (productId: string) => {
-    setEditingPrice(null);
-    setEditedPrices(prev => {
-      const updated = { ...prev };
-      delete updated[productId];
-      return updated;
-    });
-  };
+  // const handleCancelEdit = (productId: string) => {
+  //   setEditedPrices(prev => {
+  //     const updated = { ...prev };
+  //     delete updated[productId];
+  //     return updated;
+  //   });
+  // };
 
   // Pagination helper functions
-  const getPaginatedItems = (items: any[], count: number, page: number) => {
+  const getPaginatedItems = (items: unknown[], count: number, page: number) => {
     const startIndex = (page - 1) * count;
     const endIndex = startIndex + count;
     return items.slice(startIndex, endIndex);

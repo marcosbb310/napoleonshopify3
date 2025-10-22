@@ -95,7 +95,7 @@ export function useProducts(filter?: ProductFilter) {
   });
 
   // Transform Shopify products to ProductWithPricing with error handling
-  let productsWithPricing = shopifyProducts.map((product: ShopifyProduct) => {
+  const productsWithPricing = shopifyProducts.map((product: ShopifyProduct) => {
     try {
       return addPricingToProduct(product);
     } catch (error) {

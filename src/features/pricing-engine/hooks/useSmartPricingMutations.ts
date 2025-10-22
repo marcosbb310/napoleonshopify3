@@ -100,7 +100,7 @@ interface CreateProductRequest {
 
 interface CreateProductResponse {
   success: boolean;
-  data?: any;
+  data?: Record<string, unknown>;
   error?: {
     message: string;
   };

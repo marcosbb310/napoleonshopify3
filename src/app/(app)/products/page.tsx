@@ -27,7 +27,6 @@ import type { ViewMode } from '@/shared/types';
 import { Card } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
-import { Switch } from '@/shared/components/ui/switch';
 import { X, Check, Undo2, Zap, ZapOff } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -113,8 +112,7 @@ export default function ProductsPage() {
       // Clear snapshots after processing
       setGlobalSnapshots(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalSnapshots, globalEnabled, setUndo]); // setGlobalSnapshots removed - it's stable from context
+  }, [globalSnapshots, globalEnabled, setUndo, setProductUpdates, setGlobalSnapshots]);
   
   const [productUpdates, setProductUpdates] = useState<Map<string, Partial<ProductWithPricing['pricing']>>>(new Map());
   const [lastBulkAction, setLastBulkAction] = useState<{

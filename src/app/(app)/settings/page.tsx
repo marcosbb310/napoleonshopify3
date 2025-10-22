@@ -236,7 +236,7 @@ export default function SettingsPage() {
                 <div className="space-y-0.5">
                   <Label>Performance Reports</Label>
                   <p className="text-sm text-muted-foreground">
-                    Weekly summary of your store's performance
+                    Weekly summary of your store&apos;s performance
                   </p>
                 </div>
                 <Switch defaultChecked />
@@ -393,7 +393,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Active Sessions</CardTitle>
               <CardDescription>
-                Manage devices where you're currently signed in
+                Manage devices where you&apos;re currently signed in
               </CardDescription>
             </CardHeader>
             <CardContent>

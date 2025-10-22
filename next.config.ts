@@ -6,13 +6,12 @@ const nextConfig: NextConfig = {
   experimental: {
     turbo: undefined,
   },
-  // Temporarily disable ESLint during build for deployment
+  // ESLint and TypeScript checks are now enabled for better code quality
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
-  // Temporarily disable TypeScript type checking during build
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   images: {
     remotePatterns: [

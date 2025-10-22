@@ -12,7 +12,7 @@ import { Card, CardContent } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Input } from '@/shared/components/ui/input';
-import { TrendingUp, TrendingDown, Check, X, ChartLine, Activity, CheckCircle2, AlertTriangle, Zap, ChevronDown, ChevronUp } from 'lucide-react';
+import { TrendingUp, TrendingDown, Check, X, ChartLine, Activity, CheckCircle2, AlertTriangle, Zap } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import {
   Sheet,
@@ -220,7 +220,7 @@ export function ProductCard({
   // Filter history based on time range
   const getFilteredHistory = () => {
     const now = new Date();
-    let startDate = new Date();
+    const startDate = new Date();
     
     switch (historyTimeRange) {
       case '1d':
@@ -416,7 +416,7 @@ export function ProductCard({
             <div className="text-sm text-muted-foreground">
               Showing {filteredHistory.length} entries
             </div>
-            <Tabs value={historyTimeRange} onValueChange={(value) => setHistoryTimeRange(value as any)}>
+            <Tabs value={historyTimeRange} onValueChange={(value) => setHistoryTimeRange(value as '1d' | '1w' | '1m' | 'all')}>
               <TabsList>
                 <TabsTrigger value="1d">1 Day</TabsTrigger>
                 <TabsTrigger value="1w">1 Week</TabsTrigger>

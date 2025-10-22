@@ -22,6 +22,8 @@ import {
   Bug, 
   Lightbulb,
   Star,
+  Mail,
+  MessageCircle,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import { toast } from 'sonner';

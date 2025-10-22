@@ -77,9 +77,9 @@ export function MFAModal({ open, onOpenChange, mode }: {
       setBackupCodes(codes)
       
       toast.success('MFA setup ready!')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Start setup error:', error)
-      toast.error(error.message || 'Failed to start MFA setup')
+      toast.error(error instanceof Error ? error.message : 'Failed to start MFA setup')
     } finally {
       setLoading(false)
     }
@@ -121,8 +121,8 @@ export function MFAModal({ open, onOpenChange, mode }: {
       setSecret(null)
       setBackupCodes([])
       setFactorId(null)
-    } catch (error: any) {
-      toast.error(error.message || 'Verification failed')
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Verification failed')
     } finally {
       setLoading(false)
     }

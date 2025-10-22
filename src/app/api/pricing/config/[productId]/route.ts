@@ -67,7 +67,7 @@ export async function PATCH(
       'max_increase_percentage',
     ];
 
-    const updates: any = {};
+    const updates: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (body[field] !== undefined) {
         updates[field] = body[field];
@@ -113,8 +113,8 @@ export async function PATCH(
 async function handleSmartPricingToggle(productId: string, enabled: boolean) {
   try {
     // Try to find product by UUID first, then by Shopify ID
-    let product: any = null;
-    let productError: any = null;
+    let product: Record<string, unknown> | null = null;
+    let productError: unknown = null;
     
     // First try as UUID
     const uuidResult = await supabaseAdmin

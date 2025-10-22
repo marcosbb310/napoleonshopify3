@@ -12,6 +12,35 @@ export interface AlgorithmResult {
   errors: string[];
 }
 
+interface ProductRow {
+  id: string;
+  title: string;
+  shopify_id: string;
+  current_price: number;
+  pricing_config: PricingConfig | PricingConfig[];
+}
+
+interface PricingConfig {
+  current_state: string;
+  revert_wait_until_date?: string;
+  max_price_cap?: number;
+  current_price?: number;
+  base_price?: number;
+  last_price_change_date?: string;
+  price_change_frequency_hours?: number;
+}
+
+interface AlgorithmStats {
+  processed: number;
+  increased: number;
+  reverted: number;
+  waiting: number;
+}
+
+interface RevenueData {
+  [key: string]: unknown;
+}
+
 /**
  * Run pricing algorithm for all products with autopilot enabled
  */
@@ -85,7 +114,7 @@ export async function runPricingAlgorithm(storeId: string, shopDomain: string, a
 /**
  * Process a single product
  */
-async function processProduct(product: any, config: any, stats: any, shopDomain: string, accessToken: string, storeId: string) {
+async function processProduct(product: ProductRow, config: PricingConfig, stats: AlgorithmStats, shopDomain: string, accessToken: string, storeId: string) {
   const now = new Date();
 
   // Step 1: Check if waiting after revert
@@ -160,7 +189,7 @@ async function getRevenue(productId: string, periodHours: number) {
 /**
  * Increase price
  */
-async function increasePrice(product: any, config: any, stats: any, revenue: any, shopDomain: string, accessToken: string, storeId: string) {
+async function increasePrice(product: ProductRow, config: PricingConfig, stats: AlgorithmStats, revenue: RevenueData, shopDomain: string, accessToken: string, storeId: string) {
   const supabaseAdmin = createAdminClient();
   const newPrice = product.current_price * (1 + config.increment_percentage / 100);
   const percentIncrease = ((newPrice - product.starting_price) / product.starting_price) * 100;
@@ -184,7 +213,7 @@ async function increasePrice(product: any, config: any, stats: any, revenue: any
 /**
  * Revert price
  */
-async function revertPrice(product: any, config: any, stats: any, revenue: any, shopDomain: string, accessToken: string, storeId: string) {
+async function revertPrice(product: ProductRow, config: PricingConfig, stats: AlgorithmStats, revenue: RevenueData, shopDomain: string, accessToken: string, storeId: string) {
   const supabaseAdmin = createAdminClient();
   
   // Get previous price from history
@@ -219,7 +248,7 @@ async function revertPrice(product: any, config: any, stats: any, revenue: any, 
 /**
  * Update price in Shopify and database
  */
-async function updatePrice(product: any, config: any, newPrice: number, action: string, reason: string, revenue: any, shopDomain: string, accessToken: string, storeId: string) {
+async function updatePrice(product: ProductRow, config: PricingConfig, newPrice: number, action: string, reason: string, revenue: RevenueData, shopDomain: string, accessToken: string, storeId: string) {
   const supabaseAdmin = createAdminClient();
   
   // Update Shopify
