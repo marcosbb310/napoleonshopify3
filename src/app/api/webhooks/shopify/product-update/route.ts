@@ -17,6 +17,15 @@ import crypto from 'crypto';
  * This ensures manual price changes are respected and the algorithm
  * waits 2 days before resuming optimization for that product.
  */
+// Handle GET requests (for webhook testing)
+export async function GET(request: NextRequest) {
+  return NextResponse.json({
+    message: 'Webhook endpoint is active and ready to receive product updates',
+    status: 'ok',
+    timestamp: new Date().toISOString()
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Get webhook signature from headers
