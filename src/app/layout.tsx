@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Smart Pricing for Shopify",
-  description: "Maximize your profits with intelligent dynamic pricing",
+  title: "Smart Pricing for Shopify - Coming Soon",
+  description: "AI-powered dynamic pricing for Shopify stores. Coming soon!",
 };
 
 export default function RootLayout({
