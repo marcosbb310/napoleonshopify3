@@ -1,35 +1,86 @@
-// Supabase client initialization
-// This is in shared/lib because it's used by multiple features (3+)
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr'
+import { createServerClient as createSSRServerClient } from '@supabase/ssr'
+import { NextRequest, NextResponse } from 'next/server'
 
-// Validate required client-side environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required');
+  throw new Error('Missing Supabase environment variables')
 }
 
-// Client-side Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Browser Client (Client Components)
+export function createClient() {
+  return createBrowserClient(supabaseUrl, supabaseAnonKey)
+}
 
-// Server-side admin client factory function
-// This should only be called from API routes, not from client-side code
-export const getSupabaseAdmin = () => {
+// Server Component Client
+export async function createServerClient() {
+  // Import cookies dynamically to avoid bundling issues
+  const { cookies } = await import('next/headers')
+  const cookieStore = await cookies()
+  
+  return createSSRServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
+      },
+    },
+  })
+}
+
+// API Route Handler Client
+export function createRouteHandlerClient(request: NextRequest) {
+  return createSSRServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return request.cookies.get(name)?.value
+      },
+      set(name: string, value: string, options: any) {
+        request.cookies.set({ name, value, ...options })
+      },
+      remove(name: string, options: any) {
+        request.cookies.set({ name, value: '', ...options })
+      },
+    },
+  })
+}
+
+// Middleware Client
+export function createMiddlewareClient(request: NextRequest) {
+  let response = NextResponse.next({ request })
+  
+  const supabase = createSSRServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return request.cookies.get(name)?.value
+      },
+      set(name: string, value: string, options: any) {
+        response.cookies.set({ name, value, ...options })
+      },
+      remove(name: string, options: any) {
+        response.cookies.set({ name, value: '', ...options })
+      },
+    },
+  })
+  
+  return { supabase, response }
+}
+
+// Admin Client (Server-Side Only)
+export function createAdminClient() {
   if (typeof window !== 'undefined') {
-    throw new Error('getSupabaseAdmin can only be called on the server side');
+    throw new Error('Admin client can only be used on server')
   }
   
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceRoleKey) {
-    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable');
-  }
-  
-  return createClient(supabaseUrl, serviceRoleKey, {
+  return createSSRServerClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false
+    },
+    cookies: {
+      get() { return undefined },
     }
-  });
-};
-
+  })
+}

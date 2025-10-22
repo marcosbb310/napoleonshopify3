@@ -1,30 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireStore } from '@/shared/lib/apiAuth';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const storeUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL || process.env.SHOPIFY_STORE_URL;
-    const accessToken = process.env.SHOPIFY_ACCESS_TOKEN || process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
-    const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || process.env.SHOPIFY_API_VERSION || '2024-10';
+    // NEW AUTH: Require authenticated store
+    const { user, store, error } = await requireStore(request);
+    if (error) return error;
 
-    if (!storeUrl || !accessToken) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            message: 'Missing Shopify credentials on server. Set SHOPIFY_ACCESS_TOKEN and NEXT_PUBLIC_SHOPIFY_STORE_URL.',
-            statusCode: 500,
-          },
-        },
-        { status: 500 },
-      );
-    }
-
-    const baseUrl = `https://${storeUrl}/admin/api/${apiVersion}`;
+    const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
+    const baseUrl = `https://${store.shop_domain}/admin/api/${apiVersion}`;
 
     const res = await fetch(`${baseUrl}/products.json?limit=250`, {
       headers: {
         'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': accessToken,
+        'X-Shopify-Access-Token': store.access_token, // NEW AUTH: Use decrypted token from store
       },
       // Ensure server-side fetch, not cached
       cache: 'no-store',
@@ -115,23 +104,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const storeUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL || process.env.SHOPIFY_STORE_URL;
-    const accessToken = process.env.SHOPIFY_ACCESS_TOKEN || process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
-    const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || process.env.SHOPIFY_API_VERSION || '2024-10';
+    // NEW AUTH: Require authenticated store
+    const { user, store, error } = await requireStore(request);
+    if (error) return error;
 
-    if (!storeUrl || !accessToken) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            message: 'Missing Shopify credentials on server. Set SHOPIFY_ACCESS_TOKEN and NEXT_PUBLIC_SHOPIFY_STORE_URL.',
-            statusCode: 500,
-          },
-        },
-        { status: 500 },
-      );
-    }
-
+    const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
     const body = await request.json();
     const { title, description, vendor, productType, tags, status, variants, images } = body;
 
@@ -161,13 +138,13 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    const baseUrl = `https://${storeUrl}/admin/api/${apiVersion}`;
+    const baseUrl = `https://${store.shop_domain}/admin/api/${apiVersion}`;
 
     const res = await fetch(`${baseUrl}/products.json`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': accessToken,
+        'X-Shopify-Access-Token': store.access_token, // NEW AUTH: Use decrypted token
       },
       body: JSON.stringify(productPayload),
       cache: 'no-store',
@@ -202,23 +179,11 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const storeUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL || process.env.SHOPIFY_STORE_URL;
-    const accessToken = process.env.SHOPIFY_ACCESS_TOKEN || process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
-    const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || process.env.SHOPIFY_API_VERSION || '2024-10';
+    // NEW AUTH: Require authenticated store
+    const { user, store, error } = await requireStore(request);
+    if (error) return error;
 
-    if (!storeUrl || !accessToken) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            message: 'Missing Shopify credentials on server. Set SHOPIFY_ACCESS_TOKEN and NEXT_PUBLIC_SHOPIFY_STORE_URL.',
-            statusCode: 500,
-          },
-        },
-        { status: 500 },
-      );
-    }
-
+    const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
     const body = await request.json();
     const { productIds } = body;
 
@@ -229,7 +194,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const baseUrl = `https://${storeUrl}/admin/api/${apiVersion}`;
+    const baseUrl = `https://${store.shop_domain}/admin/api/${apiVersion}`;
 
     // Delete each product
     const deletePromises = productIds.map(async (productId: string) => {
@@ -237,7 +202,7 @@ export async function DELETE(request: NextRequest) {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': accessToken,
+          'X-Shopify-Access-Token': store.access_token, // NEW AUTH: Use decrypted token
         },
         cache: 'no-store',
       });

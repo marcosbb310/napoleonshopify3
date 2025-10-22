@@ -1,10 +1,10 @@
 // Resume smart pricing globally with user's choice
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/shared/lib/supabase';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabaseAdmin = getSupabaseAdmin();
+    const supabaseAdmin = createAdminClient();
     const body = await request.json();
     const { resumeOption } = body;
 

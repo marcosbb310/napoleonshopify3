@@ -1,14 +1,19 @@
 // API endpoint for global smart pricing setting
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/shared/lib/supabase';
+import { requireAuth } from '@/shared/lib/apiAuth';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 /**
  * GET /api/settings/global-pricing
  * Get the current global smart pricing enabled state
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabaseAdmin = getSupabaseAdmin();
+    // NEW AUTH: Require authentication (global setting, not store-specific)
+    const { user, error: authError } = await requireAuth(request);
+    if (authError) return authError;
+
+    const supabaseAdmin = createAdminClient();
     const { data, error } = await supabaseAdmin
       .from('global_settings')
       .select('value')
@@ -68,6 +73,10 @@ export async function GET() {
  */
 export async function PUT(request: NextRequest) {
   try {
+    // NEW AUTH: Require authentication
+    const { user, error: authError } = await requireAuth(request);
+    if (authError) return authError;
+
     const body = await request.json();
     const { enabled } = body;
 
@@ -78,7 +87,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const supabaseAdmin = getSupabaseAdmin();
+    const supabaseAdmin = createAdminClient();
     const { error } = await supabaseAdmin
       .from('global_settings')
       .update({ value: enabled })

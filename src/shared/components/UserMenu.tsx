@@ -35,9 +35,11 @@ import {
 } from '@/shared/components/ui/dropdown-menu';
 import { Badge } from '@/shared/components/ui/badge';
 import { useAuth } from '@/features/auth';
+import { createClient } from '@/shared/lib/supabase';
+import { toast } from 'sonner';
 
 export function UserMenu() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   
@@ -53,9 +55,16 @@ export function UserMenu() {
     tier: 'pro', // 'free', 'pro', 'enterprise'
   };
 
-  const handleLogout = () => {
-    logout();
-    router.push('/');
+  const handleLogout = async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      toast.success('Signed out');
+      router.push('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Failed to sign out');
+    }
   };
 
   return (
@@ -207,7 +216,13 @@ export function UserMenu() {
         <DropdownMenuSeparator />
         
         {/* Sign Out */}
-        <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive">
+        <DropdownMenuItem 
+          onSelect={(e) => {
+            e.preventDefault();
+            handleLogout();
+          }}
+          className="cursor-pointer text-destructive focus:text-destructive"
+        >
           <LogOut className="mr-2 h-4 w-4" />
           <span>Sign Out</span>
         </DropdownMenuItem>

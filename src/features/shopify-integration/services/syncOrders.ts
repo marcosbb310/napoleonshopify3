@@ -1,5 +1,5 @@
 // Service to sync orders from Shopify API to Supabase sales_data table
-import { getSupabaseAdmin } from '@/shared/lib/supabase';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 interface ShopifyOrder {
   id: string;
@@ -24,14 +24,14 @@ interface SyncResult {
  * - Groups by product and date
  * - Stores daily sales data
  */
-export async function syncOrdersFromShopify(daysBack: number = 90): Promise<SyncResult> {
+export async function syncOrdersFromShopify(storeId: string, shopDomain: string, accessToken: string, daysBack: number = 90): Promise<SyncResult> {
   const errors: string[] = [];
   let ordersProcessed = 0;
   let salesRecordsCreated = 0;
 
   try {
     // Fetch orders from Shopify
-    const orders = await fetchShopifyOrders(daysBack);
+    const orders = await fetchShopifyOrders(shopDomain, accessToken, daysBack);
     ordersProcessed = orders.length;
 
     // Group orders by product and date
@@ -40,7 +40,7 @@ export async function syncOrdersFromShopify(daysBack: number = 90): Promise<Sync
     // Store in sales_data table
     for (const [key, salesData] of salesByProductDate.entries()) {
       try {
-        await storeSalesData(salesData);
+        await storeSalesData(salesData, storeId);
         salesRecordsCreated++;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -68,21 +68,15 @@ export async function syncOrdersFromShopify(daysBack: number = 90): Promise<Sync
 /**
  * Fetch orders from Shopify API
  */
-async function fetchShopifyOrders(daysBack: number): Promise<ShopifyOrder[]> {
-  const storeUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL || process.env.SHOPIFY_STORE_URL;
-  const accessToken = process.env.SHOPIFY_ACCESS_TOKEN || process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
-  const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || process.env.SHOPIFY_API_VERSION || '2024-10';
-
-  if (!storeUrl || !accessToken) {
-    throw new Error('Missing Shopify credentials');
-  }
+async function fetchShopifyOrders(shopDomain: string, accessToken: string, daysBack: number): Promise<ShopifyOrder[]> {
+  const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
 
   // Calculate date range
   const createdAtMin = new Date();
   createdAtMin.setDate(createdAtMin.getDate() - daysBack);
   const dateString = createdAtMin.toISOString();
 
-  const baseUrl = `https://${storeUrl}/admin/api/${apiVersion}`;
+  const baseUrl = `https://${shopDomain}/admin/api/${apiVersion}`;
 
   const response = await fetch(
     `${baseUrl}/orders.json?status=any&created_at_min=${dateString}&limit=250`,
@@ -148,12 +142,15 @@ interface SalesData {
 /**
  * Store sales data in Supabase
  */
-async function storeSalesData(salesData: SalesData): Promise<void> {
+async function storeSalesData(salesData: SalesData, storeId: string): Promise<void> {
+  const supabaseAdmin = createAdminClient();
+  
   // First, get our internal product_id from shopify_product_id
   const { data: product } = await supabaseAdmin
     .from('products')
     .select('id')
     .eq('shopify_id', salesData.shopify_product_id)
+    .eq('store_id', storeId) // NEW AUTH: Filter by store
     .single();
 
   if (!product) {
@@ -166,6 +163,7 @@ async function storeSalesData(salesData: SalesData): Promise<void> {
     .upsert(
       {
         product_id: product.id,
+        store_id: storeId, // NEW AUTH: Link to store
         date: salesData.date,
         price_on_date: salesData.price_on_date,
         units_sold: salesData.units_sold,

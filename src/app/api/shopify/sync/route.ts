@@ -1,10 +1,15 @@
 // API endpoint to sync products from Shopify to Supabase
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireStore } from '@/shared/lib/apiAuth';
 import { syncProductsFromShopify } from '@/features/shopify-integration/services/syncProducts';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const result = await syncProductsFromShopify();
+    // NEW AUTH: Require authenticated store
+    const { user, store, error } = await requireStore(request);
+    if (error) return error;
+
+    const result = await syncProductsFromShopify(store.id, store.shop_domain, store.access_token);
 
     if (!result.success) {
       return NextResponse.json(

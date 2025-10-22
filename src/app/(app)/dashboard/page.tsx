@@ -15,7 +15,7 @@ import { DateRange } from 'react-day-picker';
 import { addDays, format } from 'date-fns';
 
 export default function DashboardPage() {
-  const { isInitialized } = useAuth();
+  const { isLoading: authLoading } = useAuth();
   const router = useRouter();
   
   // Date range state - defaults to last 30 days
@@ -60,8 +60,8 @@ export default function DashboardPage() {
     },
   };
 
-  // Show skeleton during data loading or auth rehydration
-  if (isLoading || !isInitialized) {
+  // Show skeleton during data loading or auth check
+  if (isLoading || authLoading) {
     return <DashboardSkeleton />;
   }
 

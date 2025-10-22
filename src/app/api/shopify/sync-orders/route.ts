@@ -1,11 +1,16 @@
 // API endpoint to sync orders from Shopify to Supabase
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireStore } from '@/shared/lib/apiAuth';
 import { syncOrdersFromShopify } from '@/features/shopify-integration/services/syncOrders';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    // NEW AUTH: Require authenticated store
+    const { user, store, error } = await requireStore(request);
+    if (error) return error;
+
     // Sync last 90 days of orders
-    const result = await syncOrdersFromShopify(90);
+    const result = await syncOrdersFromShopify(store.id, store.shop_domain, store.access_token, 90);
 
     if (!result.success) {
       return NextResponse.json(

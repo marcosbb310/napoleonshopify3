@@ -1,20 +1,27 @@
 // API endpoint to fetch pricing history for a product
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/shared/lib/supabase';
+import { requireStore } from '@/shared/lib/apiAuth';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
+    // NEW AUTH: Require authenticated store
+    const { user, store, error: authError } = await requireStore(request);
+    if (authError) return authError;
+
     const { productId } = await params;
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50');
-
+    
+    const supabaseAdmin = createAdminClient();
     const { data, error } = await supabaseAdmin
       .from('pricing_history')
       .select('*')
       .eq('product_id', productId)
+      .eq('store_id', store.id) // NEW AUTH: Filter by store
       .order('timestamp', { ascending: false })
       .limit(limit);
 

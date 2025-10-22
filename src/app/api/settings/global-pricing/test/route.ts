@@ -1,6 +1,6 @@
 // Test endpoint to check if global_settings table exists
 import { NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/shared/lib/supabase';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 /**
  * GET /api/settings/global-pricing/test
@@ -8,7 +8,7 @@ import { getSupabaseAdmin } from '@/shared/lib/supabase';
  */
 export async function GET() {
   try {
-    const supabaseAdmin = getSupabaseAdmin();
+    const supabaseAdmin = createAdminClient();
     // Try to query the table
     const { data, error } = await supabaseAdmin
       .from('global_settings')

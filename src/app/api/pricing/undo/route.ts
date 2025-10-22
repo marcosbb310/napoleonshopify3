@@ -1,6 +1,6 @@
 // Undo smart pricing toggle actions
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/shared/lib/supabase';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 interface ProductSnapshot {
   productId: string;

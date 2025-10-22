@@ -1,5 +1,5 @@
 // Simple hill-climbing pricing algorithm - all in one file
-import { getSupabaseAdmin } from '@/shared/lib/supabase';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 export interface AlgorithmResult {
   success: boolean;
@@ -15,12 +15,12 @@ export interface AlgorithmResult {
 /**
  * Run pricing algorithm for all products with autopilot enabled
  */
-export async function runPricingAlgorithm(): Promise<AlgorithmResult> {
+export async function runPricingAlgorithm(storeId: string, shopDomain: string, accessToken: string): Promise<AlgorithmResult> {
   const stats = { processed: 0, increased: 0, reverted: 0, waiting: 0 };
   const errors: string[] = [];
 
   try {
-    const supabaseAdmin = getSupabaseAdmin();
+    const supabaseAdmin = createAdminClient();
     // Check if global smart pricing is enabled
     const { data: globalSetting } = await supabaseAdmin
       .from('global_settings')
@@ -38,10 +38,11 @@ export async function runPricingAlgorithm(): Promise<AlgorithmResult> {
       };
     }
 
-    // Get all products with autopilot enabled
+    // Get all products with autopilot enabled for this store
     const { data: products } = await supabaseAdmin
       .from('products')
       .select(`*, pricing_config!inner(*)`)
+      .eq('store_id', storeId) // NEW AUTH: Filter by store
       .eq('pricing_config.auto_pricing_enabled', true);
 
     if (!products || products.length === 0) {
@@ -54,7 +55,7 @@ export async function runPricingAlgorithm(): Promise<AlgorithmResult> {
       const config = Array.isArray(row.pricing_config) ? row.pricing_config[0] : row.pricing_config;
       
       try {
-        await processProduct(row, config, stats, supabaseAdmin);
+        await processProduct(row, config, stats, shopDomain, accessToken, storeId);
       } catch (error) {
         errors.push(`${row.title}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
@@ -62,6 +63,7 @@ export async function runPricingAlgorithm(): Promise<AlgorithmResult> {
 
     // Log run
     await supabaseAdmin.from('algorithm_runs').insert({
+      store_id: storeId, // NEW AUTH: Link to store
       products_processed: stats.processed,
       products_increased: stats.increased,
       products_reverted: stats.reverted,
@@ -83,7 +85,7 @@ export async function runPricingAlgorithm(): Promise<AlgorithmResult> {
 /**
  * Process a single product
  */
-async function processProduct(product: any, config: any, stats: any, supabaseAdmin: any) {
+async function processProduct(product: any, config: any, stats: any, shopDomain: string, accessToken: string, storeId: string) {
   const now = new Date();
 
   // Step 1: Check if waiting after revert
@@ -114,13 +116,13 @@ async function processProduct(product: any, config: any, stats: any, supabaseAdm
   // Step 5: Decide what to do
   if (!revenue.hasSufficientData) {
     // First increase - no data yet
-    await increasePrice(product, config, stats, null);
+    await increasePrice(product, config, stats, null, shopDomain, accessToken, storeId);
   } else if (revenue.changePercent < -config.revenue_drop_threshold) {
     // Revenue dropped - revert
-    await revertPrice(product, config, stats, revenue);
+    await revertPrice(product, config, stats, revenue, shopDomain, accessToken, storeId);
   } else {
     // Revenue stable/up - increase
-    await increasePrice(product, config, stats, revenue);
+    await increasePrice(product, config, stats, revenue, shopDomain, accessToken, storeId);
   }
 }
 
@@ -128,6 +130,7 @@ async function processProduct(product: any, config: any, stats: any, supabaseAdm
  * Get revenue comparison
  */
 async function getRevenue(productId: string, periodHours: number) {
+  const supabaseAdmin = createAdminClient();
   const now = new Date();
   const currentStart = new Date(now.getTime() - periodHours * 60 * 60 * 1000);
   const previousStart = new Date(currentStart.getTime() - periodHours * 60 * 60 * 1000);
@@ -157,14 +160,15 @@ async function getRevenue(productId: string, periodHours: number) {
 /**
  * Increase price
  */
-async function increasePrice(product: any, config: any, stats: any, revenue: any) {
+async function increasePrice(product: any, config: any, stats: any, revenue: any, shopDomain: string, accessToken: string, storeId: string) {
+  const supabaseAdmin = createAdminClient();
   const newPrice = product.current_price * (1 + config.increment_percentage / 100);
   const percentIncrease = ((newPrice - product.starting_price) / product.starting_price) * 100;
 
   // Check max cap
   if (percentIncrease > config.max_increase_percentage) {
     const maxPrice = product.starting_price * (1 + config.max_increase_percentage / 100);
-    await updatePrice(product, config, maxPrice, 'increase', 'Hit max cap', revenue);
+    await updatePrice(product, config, maxPrice, 'increase', 'Hit max cap', revenue, shopDomain, accessToken, storeId);
     await supabaseAdmin
       .from('pricing_config')
       .update({ current_state: 'at_max_cap' })
@@ -173,14 +177,16 @@ async function increasePrice(product: any, config: any, stats: any, revenue: any
     return;
   }
 
-  await updatePrice(product, config, newPrice, 'increase', revenue ? `Revenue ${revenue.changePercent >= 0 ? 'up' : 'stable'}` : 'First increase', revenue);
+  await updatePrice(product, config, newPrice, 'increase', revenue ? `Revenue ${revenue.changePercent >= 0 ? 'up' : 'stable'}` : 'First increase', revenue, shopDomain, accessToken, storeId);
   stats.increased++;
 }
 
 /**
  * Revert price
  */
-async function revertPrice(product: any, config: any, stats: any, revenue: any) {
+async function revertPrice(product: any, config: any, stats: any, revenue: any, shopDomain: string, accessToken: string, storeId: string) {
+  const supabaseAdmin = createAdminClient();
+  
   // Get previous price from history
   const { data: history } = await supabaseAdmin
     .from('pricing_history')
@@ -193,7 +199,7 @@ async function revertPrice(product: any, config: any, stats: any, revenue: any) 
 
   const previousPrice = history?.old_price || product.starting_price;
 
-  await updatePrice(product, config, previousPrice, 'revert', `Revenue dropped ${revenue.changePercent.toFixed(1)}%`, revenue);
+  await updatePrice(product, config, previousPrice, 'revert', `Revenue dropped ${revenue.changePercent.toFixed(1)}%`, revenue, shopDomain, accessToken, storeId);
 
   // Set waiting state (updatePrice already set next_price_change_date)
   const waitUntil = new Date();
@@ -213,9 +219,11 @@ async function revertPrice(product: any, config: any, stats: any, revenue: any) 
 /**
  * Update price in Shopify and database
  */
-async function updatePrice(product: any, config: any, newPrice: number, action: string, reason: string, revenue: any) {
+async function updatePrice(product: any, config: any, newPrice: number, action: string, reason: string, revenue: any, shopDomain: string, accessToken: string, storeId: string) {
+  const supabaseAdmin = createAdminClient();
+  
   // Update Shopify
-  await updateShopifyPrice(product.shopify_id, newPrice);
+  await updateShopifyPrice(product.shopify_id, newPrice, shopDomain, accessToken);
 
   // Update database
   await supabaseAdmin
@@ -251,14 +259,9 @@ async function updatePrice(product: any, config: any, newPrice: number, action: 
 /**
  * Update price in Shopify via API
  */
-async function updateShopifyPrice(shopifyId: string, newPrice: number) {
-  const storeUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL || process.env.SHOPIFY_STORE_URL;
-  const accessToken = process.env.SHOPIFY_ACCESS_TOKEN || process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
+async function updateShopifyPrice(shopifyId: string, newPrice: number, shopDomain: string, accessToken: string) {
   const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
-
-  if (!storeUrl || !accessToken) throw new Error('Missing Shopify credentials');
-
-  const baseUrl = `https://${storeUrl}/admin/api/${apiVersion}`;
+  const baseUrl = `https://${shopDomain}/admin/api/${apiVersion}`;
 
   // Get product to find variant ID
   const productRes = await fetch(`${baseUrl}/products/${shopifyId}.json`, {

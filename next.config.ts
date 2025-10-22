@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Disable Turbopack temporarily due to Node.js v24 compatibility issues
+  // Can re-enable after upgrading to Node.js 22 LTS
+  experimental: {
+    turbo: undefined,
+  },
   images: {
     remotePatterns: [
       {

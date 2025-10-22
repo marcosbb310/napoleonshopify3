@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/shared/lib/supabase';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 export async function GET() {
   try {
-    const supabaseAdmin = getSupabaseAdmin();
+    const supabaseAdmin = createAdminClient();
     
     // Test 1: Check if new tables exist
     const { data: usersTest, error: usersError } = await supabaseAdmin

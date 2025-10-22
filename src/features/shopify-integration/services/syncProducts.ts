@@ -1,5 +1,5 @@
 // Service to sync products from Shopify API to Supabase database
-import { getSupabaseAdmin } from '@/shared/lib/supabase';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 interface ShopifyProduct {
   id: string;
@@ -24,18 +24,18 @@ interface SyncResult {
  * - Inserts/updates in products table
  * - Initializes pricing_config for new products
  */
-export async function syncProductsFromShopify(): Promise<SyncResult> {
+export async function syncProductsFromShopify(storeId: string, shopDomain: string, accessToken: string): Promise<SyncResult> {
   const errors: string[] = [];
   let synced = 0;
 
   try {
     // Fetch products from Shopify
-    const shopifyProducts = await fetchShopifyProducts();
+    const shopifyProducts = await fetchShopifyProducts(shopDomain, accessToken);
 
     // Process each product
     for (const shopifyProduct of shopifyProducts) {
       try {
-        await syncSingleProduct(shopifyProduct);
+        await syncSingleProduct(shopifyProduct, storeId);
         synced++;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -61,16 +61,9 @@ export async function syncProductsFromShopify(): Promise<SyncResult> {
 /**
  * Fetch products from Shopify API
  */
-async function fetchShopifyProducts(): Promise<ShopifyProduct[]> {
-  const storeUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL || process.env.SHOPIFY_STORE_URL;
-  const accessToken = process.env.SHOPIFY_ACCESS_TOKEN || process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
-  const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || process.env.SHOPIFY_API_VERSION || '2024-10';
-
-  if (!storeUrl || !accessToken) {
-    throw new Error('Missing Shopify credentials');
-  }
-
-  const baseUrl = `https://${storeUrl}/admin/api/${apiVersion}`;
+async function fetchShopifyProducts(shopDomain: string, accessToken: string): Promise<ShopifyProduct[]> {
+  const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
+  const baseUrl = `https://${shopDomain}/admin/api/${apiVersion}`;
 
   const response = await fetch(
     `${baseUrl}/products.json?limit=250`,
@@ -94,15 +87,18 @@ async function fetchShopifyProducts(): Promise<ShopifyProduct[]> {
 /**
  * Sync a single product to Supabase
  */
-async function syncSingleProduct(shopifyProduct: ShopifyProduct): Promise<void> {
+async function syncSingleProduct(shopifyProduct: ShopifyProduct, storeId: string): Promise<void> {
+  const supabaseAdmin = createAdminClient();
+  
   // Get the first variant's price as the current price
   const currentPrice = parseFloat(shopifyProduct.variants[0]?.price || '0');
 
-  // Check if product already exists
+  // Check if product already exists for this store
   const { data: existingProduct } = await supabaseAdmin
     .from('products')
     .select('id, starting_price')
     .eq('shopify_id', shopifyProduct.id)
+    .eq('store_id', storeId) // NEW AUTH: Filter by store
     .single();
 
   if (existingProduct) {
@@ -122,6 +118,7 @@ async function syncSingleProduct(shopifyProduct: ShopifyProduct): Promise<void> 
     const { data: newProduct, error: insertError } = await supabaseAdmin
       .from('products')
       .insert({
+        store_id: storeId, // NEW AUTH: Link to store
         shopify_id: shopifyProduct.id,
         title: shopifyProduct.title,
         vendor: shopifyProduct.vendor,

@@ -1,6 +1,7 @@
 // API endpoints for pricing configuration management
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/shared/lib/supabase';
+import { requireStore } from '@/shared/lib/apiAuth';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 // GET pricing config for a product
 export async function GET(
@@ -8,7 +9,12 @@ export async function GET(
   { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
+    // NEW AUTH: Require authenticated store
+    const { user, store, error: authError } = await requireStore(request);
+    if (authError) return authError;
+
     const { productId } = await params;
+    const supabaseAdmin = createAdminClient();
 
     const { data, error } = await supabaseAdmin
       .from('pricing_config')
@@ -39,8 +45,13 @@ export async function PATCH(
   { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
+    // NEW AUTH: Require authenticated store
+    const { user, store, error: authError } = await requireStore(request);
+    if (authError) return authError;
+
     const { productId } = await params;
     const body = await request.json();
+    const supabaseAdmin = createAdminClient();
 
     // Check if this is a smart pricing toggle
     if (body.auto_pricing_enabled !== undefined) {

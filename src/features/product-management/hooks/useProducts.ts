@@ -2,6 +2,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useAuthenticatedFetch } from '@/shared/lib/apiClient';
+import { useCurrentStore } from '@/features/auth';
 import type { ProductWithPricing, ProductFilter, ProductPricing } from '../types';
 import type { ShopifyProduct } from '@/features/shopify-integration';
 import { getShopifyClient } from '@/features/shopify-integration';
@@ -50,26 +52,13 @@ function addPricingToProduct(shopifyProduct: ShopifyProduct): ProductWithPricing
   };
 }
 
-// Fetch function for React Query
-async function fetchProductsFromAPI(): Promise<ShopifyProduct[]> {
-  // Fetch via server-side proxy to avoid CORS and hide token
-  const res = await fetch('/api/shopify/products', { cache: 'no-store' });
-  
-  if (!res.ok) {
-    throw new Error(`HTTP error! status: ${res.status}`);
-  }
-  
-  const response = await res.json();
-
-  if (!response.success || !response.data) {
-    console.error('Shopify API Error:', response?.error || {});
-    throw new Error(response?.error?.message || 'Failed to fetch products');
-  }
-
-  return response.data || [];
-}
-
 export function useProducts(filter?: ProductFilter) {
+  // NEW AUTH: Get authenticated fetch that includes store ID
+  const authenticatedFetch = useAuthenticatedFetch();
+  
+  // Get current store to check if it's loaded
+  const { currentStore, isLoading: storeLoading } = useCurrentStore();
+  
   // Use React Query for data fetching with automatic caching
   const { 
     data: shopifyProducts = [], 
@@ -77,14 +66,36 @@ export function useProducts(filter?: ProductFilter) {
     error: queryError,
     refetch 
   } = useQuery({
-    queryKey: ['products'], // Cache key
-    queryFn: fetchProductsFromAPI,
+    queryKey: ['products', currentStore?.id], // Include store ID in cache key
+    queryFn: async () => {
+      // Don't fetch if no store is selected
+      if (!currentStore?.id) {
+        throw new Error('No store selected');
+      }
+      
+      // Fetch via server-side proxy with authenticated store context
+      const res = await authenticatedFetch('/api/shopify/products', { cache: 'no-store' });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      
+      const response = await res.json();
+
+      if (!response.success || !response.data) {
+        console.error('Shopify API Error:', response?.error || {});
+        throw new Error(response?.error?.message || 'Failed to fetch products');
+      }
+
+      return response.data || [];
+    },
+    enabled: !!currentStore?.id, // Only fetch when we have a store
     staleTime: 5 * 60 * 1000, // Data stays fresh for 5 minutes
     gcTime: 10 * 60 * 1000, // Cache persists for 10 minutes
   });
 
   // Transform Shopify products to ProductWithPricing with error handling
-  let productsWithPricing = shopifyProducts.map((product) => {
+  let productsWithPricing = shopifyProducts.map((product: ShopifyProduct) => {
     try {
       return addPricingToProduct(product);
     } catch (error) {
@@ -156,7 +167,7 @@ export function useProducts(filter?: ProductFilter) {
 
   return { 
     products: filtered, 
-    loading: isLoading, 
+    loading: isLoading || storeLoading, // Include store loading state
     error: queryError ? (queryError as Error).message : null, 
     refetch 
   };
