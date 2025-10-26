@@ -14,7 +14,6 @@ export {
 } from './hooks/useAuthMutations';
 export { useStores } from './hooks/useStores';
 export { useCurrentStore } from './hooks/useCurrentStore';
-export { useShopifyOAuth } from './hooks/useShopifyOAuth';
 
 // Components
 export { AuthModal } from './components/AuthModal';

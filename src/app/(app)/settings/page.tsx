@@ -19,6 +19,8 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { useAuth } from '@/features/auth';
+import { useStores, StoreConnectionCard } from '@/features/shopify-integration';
+import { StoreConnectionModal } from '@/features/shopify-oauth';
 import { 
   User, 
   Key, 
@@ -36,14 +38,17 @@ import {
   Globe,
   Clock,
   Smartphone,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SettingsPage() {
   const searchParams = useSearchParams();
-  const { user, updateUser } = useAuth();
+  const { user } = useAuth();
+  const { stores, isLoading: storesLoading } = useStores();
   const [activeTab, setActiveTab] = useState('general');
-  const [storeUrl, setStoreUrl] = useState(user?.shopifyStoreUrl || '');
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [storeUrl, setStoreUrl] = useState('');
   const [accessToken, setAccessToken] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [currency, setCurrency] = useState('USD');
@@ -59,7 +64,7 @@ export default function SettingsPage() {
   }, [searchParams]);
 
   const handleSaveShopify = () => {
-    updateUser({ shopifyStoreUrl: storeUrl });
+    // TODO: Implement user profile update
     toast.success('Shopify settings saved successfully');
   };
 
@@ -129,8 +134,8 @@ export default function SettingsPage() {
                 <Label htmlFor="name">Full Name</Label>
               <Input
                 id="name"
-                value={user?.name || ''}
-                onChange={(e) => updateUser({ name: e.target.value })}
+                value={user?.email || ''}
+                disabled
               />
             </div>
 
@@ -477,37 +482,37 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="border rounded-lg p-4">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold">Demo Store</h3>
-                      <div className="flex items-center gap-1 text-sm text-green-600">
-                        <CheckCircle2 className="h-4 w-4" />
-                        <span>Connected</span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">demo-store.myshopify.com</p>
-                  </div>
-                  <Button variant="outline" size="sm">Disconnect</Button>
+              {storesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-muted-foreground">Loading stores...</span>
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Products</p>
-                    <p className="font-medium">256</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Last Sync</p>
-                    <p className="font-medium">2 min ago</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Status</p>
-                    <p className="font-medium text-green-600">Active</p>
-                  </div>
+              ) : stores.length > 0 ? (
+                <div className="space-y-4">
+                  {stores.map((store) => (
+                    <StoreConnectionCard 
+                      key={store.id} 
+                      store={store}
+                      onDisconnect={(storeId) => {
+                        // Store will be removed from list automatically via React Query
+                      }}
+                    />
+                  ))}
                 </div>
-              </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Store className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No stores connected</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Connect your Shopify store to start using smart pricing
+                  </p>
+                </div>
+              )}
 
-              <Button>
+              <Button 
+                onClick={() => setShowConnectionModal(true)}
+                className="w-full"
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Connect New Store
               </Button>
@@ -703,6 +708,16 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <StoreConnectionModal 
+        open={showConnectionModal}
+        onClose={() => setShowConnectionModal(false)}
+        onSuccess={(storeId) => {
+          console.log('Store connected:', storeId);
+          toast.success('🎉 Store connected successfully!');
+          // Optionally redirect or show success message
+        }}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient, createAdminClient } from './supabase'
+import { getEncryptionKey } from './encryption'
 
 export async function requireAuth(request: NextRequest) {
   const supabase = createRouteHandlerClient(request)
@@ -31,11 +32,29 @@ export async function requireStore(request: NextRequest) {
     }
   }
   
-  const supabase = createRouteHandlerClient(request)
-  const { data: store, error: storeError } = await supabase
+  // Use admin client to bypass RLS policies
+  const supabaseAdmin = createAdminClient()
+  
+  // First get user profile to verify ownership
+  const { data: userProfile } = await supabaseAdmin
+    .from('users')
+    .select('id')
+    .eq('auth_user_id', user.id)
+    .single()
+  
+  if (!userProfile) {
+    return { 
+      user, 
+      store: null, 
+      error: NextResponse.json({ error: 'User profile not found' }, { status: 404 }) 
+    }
+  }
+  
+  const { data: store, error: storeError } = await supabaseAdmin
     .from('stores')
     .select('*')
     .eq('id', storeId)
+    .eq('user_id', userProfile.id)
     .single()
   
   if (storeError || !store) {
@@ -52,7 +71,7 @@ export async function requireStore(request: NextRequest) {
       const admin = createAdminClient()
       const { data, error: decryptError } = await admin.rpc('decrypt_token', {
         encrypted_data: store.access_token_encrypted,
-        key: process.env.ENCRYPTION_KEY!
+        key: getEncryptionKey()
       })
       
       if (decryptError) {

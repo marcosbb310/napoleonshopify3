@@ -2,6 +2,7 @@ interface RequiredEnvVars {
   // Shopify OAuth
   SHOPIFY_API_KEY: string;
   SHOPIFY_API_SECRET: string;
+  SHOPIFY_SCOPES: string;
   SHOPIFY_WEBHOOK_SECRET: string;
   
   // App Configuration
@@ -20,6 +21,7 @@ interface RequiredEnvVars {
 const requiredEnvVars: (keyof RequiredEnvVars)[] = [
   'SHOPIFY_API_KEY',
   'SHOPIFY_API_SECRET',
+  'SHOPIFY_SCOPES',
   'SHOPIFY_WEBHOOK_SECRET',
   'NEXT_PUBLIC_APP_URL',
   'NEXT_PUBLIC_SHOPIFY_API_VERSION',

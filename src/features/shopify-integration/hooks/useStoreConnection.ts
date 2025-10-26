@@ -12,15 +12,11 @@ export function useStoreConnection() {
       }
 
       // Test Shopify API connection by making a simple request
-      const response = await fetch('/api/shopify/test-connection', {
-        method: 'POST',
+      const response = await fetch(`/api/shopify/test-connection?storeId=${currentStore.id}`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          storeId: currentStore.id,
-          shopDomain: currentStore.shop_domain,
-        }),
       });
 
       if (!response.ok) {

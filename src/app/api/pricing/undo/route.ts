@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     // Restore each product to its previous state
     for (const snapshot of productSnapshots) {
       // Update pricing config
-      const configUpdates: Record<string, any> = {
+      const configUpdates: Record<string, string | boolean> = {
         auto_pricing_enabled: snapshot.auto_pricing_enabled,
         current_state: snapshot.current_state || 'increasing',
       };

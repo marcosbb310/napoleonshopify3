@@ -7,6 +7,14 @@ export async function GET(request: NextRequest) {
     const { user, store, error } = await requireStore(request);
     if (error) return error;
 
+    console.log('🔍 Fetching products for store:', {
+      storeId: store.id,
+      shopDomain: store.shop_domain,
+      hasToken: !!store.access_token,
+      tokenLength: store.access_token?.length,
+      scope: store.scope
+    });
+
     const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
     const baseUrl = `https://${store.shop_domain}/admin/api/${apiVersion}`;
 
@@ -29,6 +37,20 @@ export async function GET(request: NextRequest) {
       } catch {
         // ignore JSON parse error
       }
+      
+      // Log diagnostic info for 403 errors (invalid token)
+      if (res.status === 403) {
+        console.error('❌ Shopify 403 Error:', {
+          storeId: store.id,
+          shopDomain: store.shop_domain,
+          tokenLength: store.access_token?.length,
+          message: errorMessage,
+        });
+        
+        // Provide user-friendly error message for 403
+        errorMessage = 'Your Shopify access token is invalid or expired. Please reconnect your store in Settings.';
+      }
+      
       return NextResponse.json(
         { success: false, error: { message: errorMessage, statusCode: res.status } },
         { status: res.status },
@@ -38,7 +60,7 @@ export async function GET(request: NextRequest) {
     const data = await res.json();
     
     // Transform Shopify API response to match our expected format
-    const transformedProducts = data.products?.map((product: any) => ({
+    const transformedProducts = data.products?.map((product: Record<string, unknown>) => ({
       id: product.id.toString(),
       title: product.title,
       handle: product.handle,
@@ -47,7 +69,7 @@ export async function GET(request: NextRequest) {
       productType: product.product_type || '',
       tags: product.tags ? product.tags.split(',').map((tag: string) => tag.trim()) : [],
       status: product.status as 'active' | 'draft' | 'archived',
-      images: product.images?.map((image: any) => ({
+      images: product.images?.map((image: Record<string, unknown>) => ({
         id: image.id.toString(),
         productId: product.id.toString(),
         src: image.src,
@@ -55,7 +77,7 @@ export async function GET(request: NextRequest) {
         width: image.width || 800,
         height: image.height || 800,
       })) || [],
-      variants: product.variants?.map((variant: any) => {
+      variants: product.variants?.map((variant: Record<string, unknown>) => {
         // Validate and sanitize price values
         const price = parseFloat(variant.price) || 0;
         const compareAtPrice = variant.compare_at_price ? parseFloat(variant.compare_at_price) : null;
@@ -121,7 +143,7 @@ export async function POST(request: NextRequest) {
         product_type: productType || '',
         tags: Array.isArray(tags) ? tags.join(', ') : (tags || ''),
         status: status || 'active',
-        variants: (variants || []).map((v: any) => ({
+        variants: (variants || []).map((v: Record<string, unknown>) => ({
           title: v.title || 'Default',
           price: v.price || '0.00',
           compare_at_price: v.compareAtPrice || null,
@@ -131,7 +153,7 @@ export async function POST(request: NextRequest) {
           weight: v.weight || null,
           weight_unit: v.weightUnit || 'kg',
         })),
-        images: (images || []).map((img: any) => ({
+        images: (images || []).map((img: Record<string, unknown>) => ({
           src: img.src,
           alt: img.alt || '',
         })),

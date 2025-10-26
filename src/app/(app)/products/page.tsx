@@ -4,7 +4,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { 
-  useProducts, 
   type ProductFilter, 
   type ProductWithPricing,
   ProductCard,
@@ -15,6 +14,7 @@ import {
   ProductCardSkeleton,
   ProductListSkeleton,
 } from '@/features/product-management';
+import { useProducts, useStores } from '@/features/shopify-integration';
 import { 
   useSmartPricing, 
   useUndoState, 
@@ -27,6 +27,7 @@ import type { ViewMode } from '@/shared/types';
 import { Card } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
 import { X, Check, Undo2, Zap, ZapOff } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -44,6 +45,16 @@ export default function ProductsPage() {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [showingVariantsForProduct, setShowingVariantsForProduct] = useState<string | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [selectedStoreId, setSelectedStoreId] = useState<string | undefined>();
+
+  // Get stores and select the first one if none selected
+  const { stores, isLoading: storesLoading } = useStores();
+  
+  useEffect(() => {
+    if (stores.length > 0 && !selectedStoreId) {
+      setSelectedStoreId(stores[0].id);
+    }
+  }, [stores, selectedStoreId]);
   const { 
     globalEnabled, 
     handleGlobalToggle,
@@ -70,8 +81,44 @@ export default function ProductsPage() {
   // Product updates state - must be declared before useEffect that uses it
   const [productUpdates, setProductUpdates] = useState<Map<string, Partial<ProductWithPricing['pricing']>>>(new Map());
 
-  // Get all products (no loading state for filtering/searching)
-  const { products: allProducts, loading, error, refetch } = useProducts();
+  // Get all products from the selected store
+  const { products: shopifyProducts, isLoading: productsLoading, error: productsError, syncProducts } = useProducts(selectedStoreId, {
+    search: searchQuery,
+    sortBy: filter.sortBy as any,
+    sortOrder: filter.sortDirection as any,
+  });
+
+  // Transform Shopify products to ProductWithPricing format
+  const allProducts: ProductWithPricing[] = useMemo(() => {
+    return shopifyProducts.map(product => {
+      const firstVariant = product.variants[0];
+      const currentPrice = firstVariant ? parseFloat(firstVariant.price) : 0;
+      const basePrice = currentPrice;
+      const cost = basePrice * 0.6; // Assume 60% cost
+      const maxPrice = basePrice * 1.5; // Assume 150% max price
+      const profitMargin = basePrice > 0 ? ((basePrice - cost) / basePrice) * 100 : 0;
+
+      return {
+        ...product,
+        pricing: {
+          basePrice,
+          cost,
+          maxPrice,
+          currentPrice,
+          profitMargin,
+          lastUpdated: new Date(),
+        },
+      };
+    });
+  }, [shopifyProducts]);
+
+  const loading = productsLoading || storesLoading;
+  const error = productsError;
+  const refetch = () => {
+    if (selectedStoreId) {
+      syncProducts.mutate(selectedStoreId);
+    }
+  };
 
   // Memoized callback for global toggle to prevent infinite loops
   // NOTE: handleGlobalToggle now reads globalEnabled internally, no need to pass it
@@ -465,12 +512,54 @@ export default function ProductsPage() {
     
   const totalInventory = selectedProduct ? selectedProduct.variants.reduce((sum, v) => sum + (v.inventoryQuantity || 0), 0) : 0;
 
+  // Show store selection if no store is selected
+  if (stores.length === 0 && !storesLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+            <p className="text-muted-foreground">Manage your products and pricing</p>
+          </div>
+        </div>
+        <Card className="flex h-64 items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg font-medium">No stores connected</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Connect your Shopify store to start managing products
+            </p>
+            <Link href="/settings?tab=integrations">
+              <Button>Connect Store</Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 relative">
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-4 mb-2">
             <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+            
+            {/* Store Selector */}
+            {stores.length > 1 && (
+              <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Select store" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores.map((store) => (
+                    <SelectItem key={store.id} value={store.id}>
+                      {store.shop_domain}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            
             {/* Test Layout Links */}
             <div className="flex items-center gap-2">
               <Link href="/products-test">
@@ -639,10 +728,37 @@ export default function ProductsPage() {
         <Card className="flex h-64 items-center justify-center">
           <div className="text-center">
             <p className="text-lg font-medium text-destructive">Failed to load products</p>
-            <p className="text-sm text-muted-foreground mb-4">{error}</p>
-            <p className="text-xs text-muted-foreground">
-              Using mock data for demonstration. Check your Shopify credentials in .env.local
-            </p>
+            <p className="text-sm text-muted-foreground mb-4">{error instanceof Error ? error.message : String(error)}</p>
+            {(error instanceof Error ? error.message : String(error)).includes('403') || (error instanceof Error ? error.message : String(error)).includes('Forbidden') ? (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Your Shopify access token may be invalid or expired.
+                </p>
+                <Link href="/settings">
+                  <Button 
+                    variant="default" 
+                    size="sm" 
+                    className="mt-4"
+                  >
+                    Reconnect Store
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Please check your store connection and try refreshing the page.
+                </p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-4"
+                  onClick={() => window.location.reload()}
+                >
+                  Refresh Page
+                </Button>
+              </div>
+            )}
           </div>
         </Card>
       ) : products.length === 0 ? (

@@ -1,111 +1,112 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/shared/lib/supabase';
+import { NextRequest, NextResponse } from 'next/server'
+import { createRouteHandlerClient } from '@/shared/lib/supabase'
+import { createAdminClient } from '@/shared/lib/supabase'
+import { getEncryptionKey } from '@/shared/lib/encryption'
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const supabaseAdmin = createAdminClient();
-    const { storeId, shopDomain } = await request.json();
-
-    if (!storeId || !shopDomain) {
-      return NextResponse.json(
-        { success: false, error: 'Missing store ID or shop domain' },
-        { status: 400 }
-      );
-    }
-
-    // Get store credentials from database
-    const { data: store, error } = await supabaseAdmin
-      .from('stores')
-      .select('access_token, shop_domain, is_active')
-      .eq('id', storeId)
-      .eq('shop_domain', shopDomain)
-      .single();
-
-    if (error || !store) {
-      return NextResponse.json(
-        { success: false, error: 'Store not found' },
-        { status: 404 }
-      );
-    }
-
-    if (!store.is_active) {
-      return NextResponse.json(
-        { success: false, error: 'Store is inactive' },
-        { status: 400 }
-      );
-    }
-
-    if (!store.access_token) {
-      return NextResponse.json(
-        { success: false, error: 'No access token found' },
-        { status: 400 }
-      );
-    }
-
-    // Test the connection by making a simple API call to Shopify
-    const testUrl = `https://${shopDomain}/admin/api/2024-10/shop.json`;
+    const supabase = createRouteHandlerClient(request)
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
     
-    const response = await fetch(testUrl, {
-      headers: {
-        'X-Shopify-Access-Token': store.access_token,
-      },
-      // Add timeout to prevent hanging
-      signal: AbortSignal.timeout(10000), // 10 second timeout
-    });
-
-    if (!response.ok) {
-      // Try to get more specific error info
-      const errorData = await response.text();
-      console.error('Shopify API error:', response.status, errorData);
-      
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: `Shopify API returned ${response.status}`,
-          details: response.status === 401 ? 'Invalid or expired access token' : errorData
-        },
-        { status: response.status }
-      );
+    if (!user || authError) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Parse the response to ensure it's valid
-    try {
-      const shopData = await response.json();
-      if (!shopData.shop || !shopData.shop.id) {
-        throw new Error('Invalid shop data received');
-      }
-    } catch (parseError) {
-      console.error('Failed to parse Shopify response:', parseError);
-      return NextResponse.json(
-        { success: false, error: 'Invalid response from Shopify' },
-        { status: 500 }
-      );
+    const { searchParams } = new URL(request.url)
+    const storeId = searchParams.get('storeId')
+
+    if (!storeId) {
+      return NextResponse.json({ error: 'Store ID is required' }, { status: 400 })
     }
 
-    // Update last_synced_at to indicate successful connection
-    await supabaseAdmin
+    // Get store details using admin client
+    const supabaseAdmin = createAdminClient()
+    const { data: userProfile } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (!userProfile) {
+      return NextResponse.json({ error: 'User profile not found' }, { status: 404 })
+    }
+
+    const { data: store, error: storeError } = await supabaseAdmin
       .from('stores')
-      .update({ last_synced_at: new Date().toISOString() })
-      .eq('id', storeId);
+      .select(`
+        id,
+        shop_domain,
+        access_token,
+        access_token_encrypted,
+        scope,
+        is_active
+      `)
+      .eq('id', storeId)
+      .eq('user_id', userProfile.id)
+      .single()
 
-    return NextResponse.json({ 
+    if (storeError || !store) {
+      return NextResponse.json({ error: 'Store not found' }, { status: 404 })
+    }
+
+    // Test Shopify API connection
+    let connectionStatus = 'disconnected'
+    let errorMessage = null
+
+    try {
+      // Decrypt token if needed
+      let accessToken = store.access_token
+      
+      if (!accessToken && store.access_token_encrypted) {
+        const { data: decryptedToken } = await supabaseAdmin.rpc('decrypt_token', {
+          encrypted_data: store.access_token_encrypted,
+          key: getEncryptionKey(),
+        })
+        accessToken = decryptedToken
+      }
+
+      if (accessToken) {
+        // Test connection by fetching shop info
+        const shopResponse = await fetch(`https://${store.shop_domain}/admin/api/2024-10/shop.json`, {
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (shopResponse.ok) {
+          connectionStatus = 'connected'
+        } else {
+          connectionStatus = 'error'
+          errorMessage = `Shopify API error: ${shopResponse.status} ${shopResponse.statusText}`
+        }
+      } else {
+        connectionStatus = 'error'
+        errorMessage = 'No access token available'
+      }
+    } catch (error) {
+      connectionStatus = 'error'
+      errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    }
+
+    return NextResponse.json({
       success: true,
-      message: 'Connection successful'
-    });
+      data: {
+        store_id: store.id,
+        shop_domain: store.shop_domain,
+        connection_status: connectionStatus,
+        error_message: errorMessage,
+      },
+    })
 
   } catch (error) {
-    console.error('Connection test error:', error);
-    
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      return NextResponse.json(
-        { success: false, error: 'Connection timeout - Shopify may be temporarily unavailable' },
-        { status: 408 }
-      );
-    }
-
+    console.error('Connection test error:', error)
     return NextResponse.json(
-      { success: false, error: 'Connection test failed' },
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      },
       { status: 500 }
-    );
+    )
   }
 }

@@ -1,6 +1,6 @@
 // Simple rate limiter for Shopify API (2 requests per second)
 class RateLimiter {
-  private queue: Array<() => Promise<any>> = [];
+  private queue: Array<() => Promise<unknown>> = [];
   private isProcessing = false;
   private lastRequest = 0;
   private readonly minInterval = 500; // 500ms between requests (2 req/sec)

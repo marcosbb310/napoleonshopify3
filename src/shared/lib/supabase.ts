@@ -74,6 +74,10 @@ export function createAdminClient() {
     throw new Error('Admin client can only be used on server')
   }
   
+  if (!supabaseServiceKey) {
+    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
+  }
+  
   return createSSRServerClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
@@ -81,6 +85,11 @@ export function createAdminClient() {
     },
     cookies: {
       get() { return undefined },
+    },
+    global: {
+      headers: {
+        'Authorization': `Bearer ${supabaseServiceKey}`
+      }
     }
   })
 }

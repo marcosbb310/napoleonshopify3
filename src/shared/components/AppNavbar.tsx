@@ -132,7 +132,7 @@ export function AppNavbar() {
         </div>
 
         {/* User Menu - Fixed to top right */}
-        <div className="ml-auto flex items-center">
+        <div className="ml-auto flex items-center gap-3">
           <UserMenu />
         </div>
       </div>

@@ -34,20 +34,25 @@ import {
   DropdownMenuPortal,
 } from '@/shared/components/ui/dropdown-menu';
 import { Badge } from '@/shared/components/ui/badge';
-import { useAuth } from '@/features/auth';
+import { useAuth, useCurrentStore } from '@/features/auth';
 import { createClient } from '@/shared/lib/supabase';
 import { toast } from 'sonner';
 
 export function UserMenu() {
   const { user } = useAuth();
+  const { currentStore, stores } = useCurrentStore();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   
-  // Mock data - would come from context/API in production
-  const connectedStore = {
-    name: 'Demo Store',
-    domain: 'demo-store.myshopify.com',
+  // Real store data from useCurrentStore
+  const connectedStore = currentStore ? {
+    name: currentStore.shop_domain.replace('.myshopify.com', ''),
+    domain: currentStore.shop_domain,
     isConnected: true,
+  } : {
+    name: 'No Store',
+    domain: '',
+    isConnected: false,
   };
   
   const userPlan = {

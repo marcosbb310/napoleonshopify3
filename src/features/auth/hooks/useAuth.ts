@@ -7,14 +7,26 @@ export function useAuth() {
   const supabase = createClient()
   const queryClient = useQueryClient()
 
-  const { data: session, isLoading } = useQuery({
+  const { data: session, isLoading, error } = useQuery({
     queryKey: ['session'],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      return session
+      try {
+        console.log('🔐 Checking authentication...');
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) {
+          console.error('❌ Auth session error:', error);
+          throw error;
+        }
+        console.log('✅ Auth session result:', session ? 'authenticated' : 'not authenticated');
+        return session
+      } catch (error) {
+        console.error('❌ Auth query failed:', error);
+        throw error;
+      }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
+    retry: false, // Don't retry on error
   })
 
   // Listen to auth state changes
@@ -52,6 +64,7 @@ export function useAuth() {
     session,
     isLoading,
     isAuthenticated: !!session,
+    error,
   }
 }
 

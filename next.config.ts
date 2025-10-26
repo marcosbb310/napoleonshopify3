@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Set the correct workspace root to prevent Next.js warnings
+  outputFileTracingRoot: __dirname,
   // Disable Turbopack temporarily due to Node.js v24 compatibility issues
   // Can re-enable after upgrading to Node.js 22 LTS
   experimental: {

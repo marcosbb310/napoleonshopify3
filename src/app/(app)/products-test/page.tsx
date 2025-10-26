@@ -82,7 +82,7 @@ export default function ProductsTestPage() {
   const [quickEditValue, setQuickEditValue] = useState('');
 
   // Performance data state
-  const [performanceData, setPerformanceData] = useState<any>(null);
+  const [performanceData, setPerformanceData] = useState<Record<string, unknown> | null>(null);
   const [loadingPerformance, setLoadingPerformance] = useState(false);
 
   // Apply any pending updates to products
@@ -320,7 +320,7 @@ export default function ProductsTestPage() {
 
     // Save to database via API
     try {
-      const updatePayload: any = { productId: selectedProductId };
+      const updatePayload: Record<string, unknown> = { productId: selectedProductId };
       
       if (editingQuickField === 'basePrice') {
         updatePayload.startingPrice = newValue;
@@ -420,7 +420,7 @@ export default function ProductsTestPage() {
           {/* Global Smart Pricing Toggle */}
           <PowerButton 
             enabled={globalEnabled}
-            onToggle={() => handleGlobalToggle(!globalEnabled)}
+            onToggle={handleGlobalToggle}
             disabled={isLoadingGlobal}
             label="Global Smart Pricing"
           />
@@ -435,15 +435,15 @@ export default function ProductsTestPage() {
               const result = await executeUndo();
               if (result.success) {
                 toast.success(`Undone: ${undoState?.description}`);
-                if (result.snapshots) {
+                if ('snapshots' in result && result.snapshots) {
                   setProductUpdates(prev => {
                     const newMap = new Map(prev);
-                    result.snapshots.forEach((snapshot: any) => {
+                    (result.snapshots as Record<string, unknown>[]).forEach((snapshot: Record<string, unknown>) => {
                       if (snapshot.price !== undefined) {
-                        const existingUpdates = newMap.get(snapshot.shopifyId) || {};
-                        newMap.set(snapshot.shopifyId, { 
+                        const existingUpdates = newMap.get(snapshot.shopifyId as string) || {};
+                        newMap.set(snapshot.shopifyId as string, { 
                           ...existingUpdates, 
-                          currentPrice: snapshot.price 
+                          currentPrice: snapshot.price as number 
                         });
                       }
                     });
@@ -775,19 +775,19 @@ export default function ProductsTestPage() {
                             <div>
                               <p className="text-xs text-muted-foreground mb-1">Revenue Increase</p>
                               <p className="text-3xl font-bold text-green-600">
-                                {performanceData.summary.revenueIncreasePercent >= 0 ? '+' : ''}
-                                {performanceData.summary.revenueIncreasePercent.toFixed(1)}%
+                                {((performanceData.summary as Record<string, unknown>).revenueIncreasePercent as number) >= 0 ? '+' : ''}
+                                {((performanceData.summary as Record<string, unknown>).revenueIncreasePercent as number).toFixed(1)}%
                               </p>
                               <p className="text-xs text-muted-foreground mt-1">
-                                {performanceData.summary.revenueIncrease >= 0 ? '+' : ''}
-                                ${performanceData.summary.revenueIncrease.toFixed(2)} vs baseline
+                                {((performanceData.summary as Record<string, unknown>).revenueIncrease as number) >= 0 ? '+' : ''}
+                                ${((performanceData.summary as Record<string, unknown>).revenueIncrease as number).toFixed(2)} vs baseline
                               </p>
                             </div>
                             <div>
                               <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
-                              <p className="text-3xl font-bold">${performanceData.summary.totalRevenue.toFixed(2)}</p>
+                              <p className="text-3xl font-bold">${((performanceData.summary as Record<string, unknown>).totalRevenue as number).toFixed(2)}</p>
                               <p className="text-xs text-muted-foreground mt-1">
-                                {performanceData.summary.totalUnits} units sold
+                                {(performanceData.summary as Record<string, unknown>).totalUnits as number} units sold
                               </p>
                             </div>
                           </div>
@@ -797,15 +797,15 @@ export default function ProductsTestPage() {
                         <div className="grid grid-cols-3 gap-3">
                           <div className="p-4 bg-muted/30 rounded-lg">
                             <p className="text-xs text-muted-foreground mb-1">Avg Sale Price</p>
-                            <p className="text-xl font-bold">${performanceData.summary.avgPrice.toFixed(2)}</p>
+                              <p className="text-xl font-bold">${((performanceData.summary as Record<string, unknown>).avgPrice as number).toFixed(2)}</p>
                           </div>
                           <div className="p-4 bg-muted/30 rounded-lg">
                             <p className="text-xs text-muted-foreground mb-1">Price Changes</p>
-                            <p className="text-xl font-bold">{performanceData.summary.priceChanges}</p>
+                            <p className="text-xl font-bold">{(performanceData.summary as Record<string, unknown>).priceChanges as number}</p>
                           </div>
                           <div className="p-4 bg-muted/30 rounded-lg">
                             <p className="text-xs text-muted-foreground mb-1">Base Price</p>
-                            <p className="text-xl font-bold">${performanceData.product.startingPrice.toFixed(2)}</p>
+                              <p className="text-xl font-bold">${((performanceData.product as Record<string, unknown>).startingPrice as number).toFixed(2)}</p>
                           </div>
                         </div>
 
@@ -816,11 +816,11 @@ export default function ProductsTestPage() {
                             Performance by Price Point
                           </h4>
                           
-                          {performanceData.priceHistory.length > 0 ? (
+                          {(performanceData.priceHistory as Record<string, unknown>[]).length > 0 ? (
                             <div className="space-y-2">
-                              {performanceData.priceHistory.map((entry: any, index: number) => {
-                                const priceChange = entry.newPrice - entry.oldPrice;
-                                const priceChangePercent = ((priceChange / entry.oldPrice) * 100);
+                              {(performanceData.priceHistory as Record<string, unknown>[]).map((entry: Record<string, unknown>, index: number) => {
+                                const priceChange = (entry.newPrice as number) - (entry.oldPrice as number);
+                                const priceChangePercent = ((priceChange / (entry.oldPrice as number)) * 100);
                                 
                                 return (
                                   <div key={index} className="p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors border border-muted">

@@ -53,11 +53,23 @@ function addPricingToProduct(shopifyProduct: ShopifyProduct): ProductWithPricing
 }
 
 export function useProducts(filter?: ProductFilter) {
+  // Import useAuth to check authentication status
+  const { useAuth } = require('@/features/auth');
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  
   // NEW AUTH: Get authenticated fetch that includes store ID
   const authenticatedFetch = useAuthenticatedFetch();
   
   // Get current store to check if it's loaded
   const { currentStore, isLoading: storeLoading } = useCurrentStore();
+  
+  console.log('🔍 useProducts called:', {
+    isAuthenticated,
+    authLoading,
+    currentStore: currentStore?.id,
+    storeDomain: currentStore?.shop_domain,
+    storeLoading
+  });
   
   // Use React Query for data fetching with automatic caching
   const { 
@@ -68,16 +80,35 @@ export function useProducts(filter?: ProductFilter) {
   } = useQuery({
     queryKey: ['products', currentStore?.id], // Include store ID in cache key
     queryFn: async () => {
+      console.log('📥 useProducts queryFn called with store:', currentStore?.id);
+      
+      // Don't fetch if user is not authenticated
+      if (!isAuthenticated) {
+        console.log('⏸️ User not authenticated, skipping product fetch');
+        return [];
+      }
+      
       // Don't fetch if no store is selected
       if (!currentStore?.id) {
-        throw new Error('No store selected');
+        console.error('❌ No store selected in useProducts')
+        throw new Error('No store selected. Please connect a Shopify store in Settings.');
       }
       
       // Fetch via server-side proxy with authenticated store context
       const res = await authenticatedFetch('/api/shopify/products', { cache: 'no-store' });
       
       if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+        // Get error message from response
+        let errorMessage = `HTTP error! status: ${res.status}`;
+        try {
+          const errorData = await res.json();
+          if (errorData?.error?.message) {
+            errorMessage = errorData.error.message;
+          }
+        } catch {
+          // Ignore JSON parse error, use default message
+        }
+        throw new Error(errorMessage);
       }
       
       const response = await res.json();
@@ -89,7 +120,7 @@ export function useProducts(filter?: ProductFilter) {
 
       return response.data || [];
     },
-    enabled: !!currentStore?.id, // Only fetch when we have a store
+    enabled: !!isAuthenticated && !!currentStore?.id && !storeLoading && !authLoading, // Only fetch when user is authenticated, we have a store, and everything is loaded
     staleTime: 5 * 60 * 1000, // Data stays fresh for 5 minutes
     gcTime: 10 * 60 * 1000, // Cache persists for 10 minutes
   });
@@ -167,7 +198,7 @@ export function useProducts(filter?: ProductFilter) {
 
   return { 
     products: filtered, 
-    loading: isLoading || storeLoading, // Include store loading state
+    loading: isLoading || storeLoading || authLoading, // Include store and auth loading states
     error: queryError ? (queryError as Error).message : null, 
     refetch 
   };

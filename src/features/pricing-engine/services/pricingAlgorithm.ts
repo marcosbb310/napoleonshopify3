@@ -215,7 +215,7 @@ async function increasePrice(product: ProductRow, config: PricingConfig, stats: 
     return;
   }
 
-  await updatePrice(product, config, newPrice, 'increase', revenue ? `Revenue ${(revenue as any).changePercent >= 0 ? 'up' : 'stable'}` : 'First increase', revenue, shopDomain, accessToken, storeId);
+  await updatePrice(product, config, newPrice, 'increase', revenue ? `Revenue ${(revenue as Record<string, unknown>).changePercent >= 0 ? 'up' : 'stable'}` : 'First increase', revenue, shopDomain, accessToken, storeId);
   stats.increased++;
 }
 
@@ -237,7 +237,7 @@ async function revertPrice(product: ProductRow, config: PricingConfig, stats: Al
 
   const previousPrice = history?.old_price || product.starting_price;
 
-  await updatePrice(product, config, previousPrice, 'revert', `Revenue dropped ${(revenue as any).changePercent.toFixed(1)}%`, revenue, shopDomain, accessToken, storeId);
+  await updatePrice(product, config, previousPrice, 'revert', `Revenue dropped ${(revenue as Record<string, unknown>).changePercent.toFixed(1)}%`, revenue, shopDomain, accessToken, storeId);
 
   // Set waiting state (updatePrice already set next_price_change_date)
   const waitUntil = new Date();

@@ -79,7 +79,6 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = createAdminClient();
 
     // Check if webhook already processed (idempotency)
-    const webhookId = request.headers.get('x-shopify-webhook-id');
     const storeDomain = request.headers.get('x-shopify-shop-domain');
 
     if (!webhookId || !storeDomain) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireStore } from '@/shared/lib/apiAuth';
 import { createAdminClient } from '@/shared/lib/supabase';
 import { logger } from '@/shared/lib/logger';
+import { createHmac } from 'crypto';
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
       .limit(10);
 
     const productUpdateWebhook = registeredWebhooks.find(
-      (w: any) => w.topic === 'products/update' && w.address === webhookUrl
+      (w: Record<string, unknown>) => w.topic === 'products/update' && w.address === webhookUrl
     );
 
     return NextResponse.json({
@@ -93,8 +94,7 @@ export async function POST(request: NextRequest) {
         variants: [{ id: 888888, price: '99.99' }],
       };
 
-      const hmac = require('crypto')
-        .createHmac('sha256', process.env.SHOPIFY_WEBHOOK_SECRET!)
+      const hmac = createHmac('sha256', process.env.SHOPIFY_WEBHOOK_SECRET!)
         .update(JSON.stringify(testPayload), 'utf8')
         .digest('base64');
 

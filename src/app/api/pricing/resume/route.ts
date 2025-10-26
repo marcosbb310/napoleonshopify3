@@ -22,8 +22,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Try to find product by UUID first, then by Shopify ID
-    let product: any = null;
-    let productError: any = null;
+    let product: { id: string; shopify_id: string; title: string; pricing_config?: { id: string } } | null = null;
+    let productError: Error | null = null;
     
     // First try as UUID
     const uuidResult = await supabaseAdmin

@@ -194,7 +194,7 @@ export default function FeedbackPage() {
             <CardContent className="space-y-2 text-sm">
               <div>
                 <p className="text-muted-foreground">Name</p>
-                <p className="font-medium">{user?.name || 'Demo User'}</p>
+                <p className="font-medium">{user?.email?.split('@')[0] || 'Demo User'}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Email</p>

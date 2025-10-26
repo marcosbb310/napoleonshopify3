@@ -68,14 +68,14 @@ export class ShopifyClient {
   }
 
   async getProducts(): Promise<ShopifyApiResponse<ShopifyProduct[]>> {
-    const response = await this.request<{ products: any[] }>('/products.json?limit=250');
+    const response = await this.request<{ products: Record<string, unknown>[] }>('/products.json?limit=250');
     
     if (!response.success || !response.data) {
       return response as ShopifyApiResponse<ShopifyProduct[]>;
     }
 
     // Transform Shopify API response to our format
-    const transformedProducts: ShopifyProduct[] = response.data.products.map((product: any) => ({
+    const transformedProducts: ShopifyProduct[] = response.data.products.map((product: Record<string, unknown>) => ({
       id: product.id.toString(),
       title: product.title,
       handle: product.handle,
@@ -84,7 +84,7 @@ export class ShopifyClient {
       productType: product.product_type || '',
       tags: product.tags ? product.tags.split(',').map((tag: string) => tag.trim()) : [],
       status: product.status as 'active' | 'draft' | 'archived',
-      images: product.images?.map((image: any) => ({
+      images: product.images?.map((image: Record<string, unknown>) => ({
         id: image.id.toString(),
         productId: product.id.toString(),
         src: image.src,
@@ -92,7 +92,7 @@ export class ShopifyClient {
         width: image.width || 800,
         height: image.height || 800,
       })) || [],
-      variants: product.variants?.map((variant: any) => ({
+      variants: product.variants?.map((variant: Record<string, unknown>) => ({
         id: variant.id.toString(),
         productId: product.id.toString(),
         title: variant.title,

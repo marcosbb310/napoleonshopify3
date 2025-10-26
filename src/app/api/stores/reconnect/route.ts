@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       if (existingResponse.ok) {
         const { webhooks } = await existingResponse.json();
         const productUpdateWebhooks = webhooks.filter(
-          (w: any) => w.topic === 'products/update' && w.address === webhookUrl
+          (w: Record<string, unknown>) => w.topic === 'products/update' && w.address === webhookUrl
         );
 
         // Delete existing webhooks

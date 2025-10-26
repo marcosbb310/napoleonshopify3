@@ -26,6 +26,9 @@ import {
 } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useStores, useStoreData } from '@/features/shopify-integration';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
+import Link from 'next/link';
 
 export default function AnalyticsPage() {
   const searchParams = useSearchParams();
@@ -42,6 +45,20 @@ export default function AnalyticsPage() {
   
   // State for active tab
   const [activeTab, setActiveTab] = useState<string>('products');
+  
+  // Store selection
+  const [selectedStoreId, setSelectedStoreId] = useState<string | undefined>();
+  const { stores, isLoading: storesLoading } = useStores();
+  
+  // Get store analytics data
+  const { analytics, isLoading: analyticsLoading, error: analyticsError } = useStoreData(selectedStoreId);
+  
+  // Auto-select first store
+  useEffect(() => {
+    if (stores.length > 0 && !selectedStoreId) {
+      setSelectedStoreId(stores[0].id);
+    }
+  }, [stores, selectedStoreId]);
 
   // Sample data for comprehensive analytics with previous period data
   const individualProducts = [
@@ -298,7 +315,7 @@ export default function AnalyticsPage() {
     // Create array with relevance scores
     const scoredProducts = individualProducts
       .map(product => {
-        const name = product.name.toLowerCase();
+        const name = (product.name as string).toLowerCase();
         const vendor = product.vendor.toLowerCase();
         const productType = product.productType.toLowerCase();
         const tags = product.tags.map(t => t.toLowerCase());
@@ -400,22 +417,86 @@ export default function AnalyticsPage() {
     return Math.ceil(totalItems / itemsPerPage);
   };
 
+  // Show store selection if no store is selected
+  if (stores.length === 0 && !storesLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-muted-foreground">Detailed insights and performance metrics</p>
+        </div>
+        <Card className="flex h-64 items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg font-medium">No stores connected</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Connect your Shopify store to view analytics
+            </p>
+            <Link href="/settings?tab=integrations">
+              <Button>Connect Store</Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-muted-foreground">
-          Detailed insights and performance metrics
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-muted-foreground">
+            Detailed insights and performance metrics
+          </p>
+        </div>
+        
+        {/* Store Selector */}
+        {stores.length > 1 && (
+          <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Select store" />
+            </SelectTrigger>
+            <SelectContent>
+              {stores.map((store) => (
+                <SelectItem key={store.id} value={store.id}>
+                  {store.shop_domain}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="products">Product Analytics</TabsTrigger>
-          <TabsTrigger value="history">Price History</TabsTrigger>
-          <TabsTrigger value="rankings">Performance Rankings</TabsTrigger>
-          <TabsTrigger value="trends">Trend Analysis</TabsTrigger>
-        </TabsList>
+      {/* Loading State */}
+      {analyticsLoading && (
+        <Card className="flex h-64 items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading analytics data...</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Error State */}
+      {analyticsError && (
+        <Card className="flex h-64 items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg font-medium text-destructive">Failed to load analytics</p>
+            <p className="text-sm text-muted-foreground mb-4">{analyticsError.message}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Analytics Content */}
+      {!analyticsLoading && !analyticsError && (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="products">Product Analytics</TabsTrigger>
+            <TabsTrigger value="history">Price History</TabsTrigger>
+            <TabsTrigger value="rankings">Performance Rankings</TabsTrigger>
+            <TabsTrigger value="trends">Trend Analysis</TabsTrigger>
+          </TabsList>
 
         <TabsContent value="products" className="space-y-4">
             <Card>
@@ -501,11 +582,11 @@ export default function AnalyticsPage() {
                               <div className="flex items-center gap-3">
                                 <img 
                                   src={product.image} 
-                                  alt={product.name}
+                                  alt={product.name as string}
                                   className="w-16 h-16 rounded-lg object-cover border"
                                 />
                                 <div>
-                                  <h3 className="text-xl font-bold">{product.name}</h3>
+                                  <h3 className="text-xl font-bold">{product.name as string}</h3>
                                   <p className="text-sm text-muted-foreground">{product.vendor} • {product.productType}</p>
                                 </div>
                               </div>
@@ -657,11 +738,11 @@ export default function AnalyticsPage() {
                         <div className="flex items-center gap-3">
                           <img 
                             src={product.image} 
-                            alt={product.name}
+                            alt={product.name as string}
                             className="w-12 h-12 rounded-lg object-cover border"
                           />
                           <div>
-                            <h3 className="font-semibold">{product.name}</h3>
+                            <h3 className="font-semibold">{product.name as string}</h3>
                             <p className="text-sm text-muted-foreground">
                               Current: ${product.currentPrice} | Avg: ${product.avgPrice} | {product.priceChanges} changes
                             </p>
@@ -764,19 +845,19 @@ export default function AnalyticsPage() {
                 </CardHeader>
                 <CardContent className="flex-1 flex flex-col min-h-0 p-4">
                   <div className="flex-1 space-y-2 overflow-y-auto">
-                    {getPaginatedItems(performanceRankings.topPerformers, ITEMS_PER_PAGE, performersPage).map((product, index) => {
+                    {(getPaginatedItems(performanceRankings.topPerformers, ITEMS_PER_PAGE, performersPage) as Record<string, unknown>[]).map((product, index) => {
                       const actualIndex = (performersPage - 1) * ITEMS_PER_PAGE + index;
                       return (
-                        <div key={product.name} className="flex items-center justify-between p-2 rounded-lg bg-green-50 dark:bg-green-950/20 hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors">
+                        <div key={product.name as string} className="flex items-center justify-between p-2 rounded-lg bg-green-50 dark:bg-green-950/20 hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors">
                           <div className="flex-1 min-w-0">
                             <button
-                              onClick={() => handleProductClick(product.name)}
+                              onClick={() => handleProductClick(product.name as string)}
                               className="font-medium text-sm truncate text-left hover:underline cursor-pointer"
                             >
-                              {product.name}
+                              {product.name as string}
                             </button>
                             <p className="text-xs text-muted-foreground">
-                              ${product.revenue.toLocaleString()}
+                              ${(product.revenue as number).toLocaleString()}
                             </p>
                           </div>
                           <div className="text-right flex-shrink-0 ml-2">
@@ -784,7 +865,7 @@ export default function AnalyticsPage() {
                               #{actualIndex + 1}
                             </Badge>
                             <p className="text-sm text-green-600 font-semibold">
-                              +{product.growth}%
+                              +{product.growth as number}%
                             </p>
                           </div>
                         </div>
@@ -826,19 +907,19 @@ export default function AnalyticsPage() {
                 </CardHeader>
                 <CardContent className="flex-1 flex flex-col min-h-0 p-4">
                   <div className="flex-1 space-y-2 overflow-y-auto">
-                    {getPaginatedItems(performanceRankings.underperformers, ITEMS_PER_PAGE, underperformersPage).map((product, index) => {
+                    {(getPaginatedItems(performanceRankings.underperformers, ITEMS_PER_PAGE, underperformersPage) as Record<string, unknown>[]).map((product, index) => {
                       const actualIndex = (underperformersPage - 1) * ITEMS_PER_PAGE + index;
                       return (
-                        <div key={product.name} className="flex items-center justify-between p-2 rounded-lg bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/30 transition-colors">
+                        <div key={product.name as string} className="flex items-center justify-between p-2 rounded-lg bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/30 transition-colors">
                           <div className="flex-1 min-w-0">
                             <button
-                              onClick={() => handleProductClick(product.name)}
+                              onClick={() => handleProductClick(product.name as string)}
                               className="font-medium text-sm truncate text-left hover:underline cursor-pointer"
                             >
-                              {product.name}
+                              {product.name as string}
                             </button>
                             <p className="text-xs text-muted-foreground">
-                              ${product.revenue.toLocaleString()}
+                              ${(product.revenue as number).toLocaleString()}
                             </p>
                           </div>
                           <div className="text-right flex-shrink-0 ml-2">
@@ -846,7 +927,7 @@ export default function AnalyticsPage() {
                               #{actualIndex + 1}
                             </Badge>
                             <p className="text-sm text-red-600 font-semibold">
-                              {product.growth}%
+                              {product.growth as number}%
                             </p>
                           </div>
                         </div>
@@ -889,9 +970,9 @@ export default function AnalyticsPage() {
                 <CardContent className="h-[calc(100%-4rem)]">
                   <div className="space-y-3">
                     {performanceRankings.opportunities.map((product) => (
-                      <div key={product.name} className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/30 transition-colors">
+                      <div key={product.name as string} className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/30 transition-colors">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="font-medium text-sm">{product.name}</p>
+                          <p className="font-medium text-sm">{product.name as string}</p>
                           <Badge variant="outline" className="text-xs">
                             +{product.potentialMargin - product.currentMargin}% potential
                           </Badge>
@@ -927,7 +1008,7 @@ export default function AnalyticsPage() {
                     {individualProducts.map((product) => (
                       <div key={product.id} className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium">{product.name}</p>
+                          <p className="font-medium">{product.name as string}</p>
                           <p className="text-sm text-muted-foreground">
                             {product.totalSales} units sold
                           </p>
@@ -964,7 +1045,7 @@ export default function AnalyticsPage() {
                       return (
                         <div key={product.id} className="flex items-center justify-between">
                           <div>
-                            <p className="font-medium">{product.name}</p>
+                            <p className="font-medium">{product.name as string}</p>
                             <p className="text-sm text-muted-foreground">
                               Current: ${product.currentPrice}
                             </p>
@@ -1066,7 +1147,8 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
           </TabsContent>
-      </Tabs>
+        </Tabs>
+      )}
     </div>
   );
 }
