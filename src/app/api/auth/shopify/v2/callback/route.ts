@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { createRouteHandlerClient } from '@/shared/lib/supabase';
 import { validateSession, completeSession } from '@/features/shopify-oauth/services/sessionService';
 import { encryptAndStoreTokens } from '@/features/shopify-oauth/services/tokenService';
+import { registerAllWebhooks } from '@/features/shopify-integration/services/webhookManager';
 import type { OAuthCallbackParams, ShopifyTokenResponse } from '@/features/shopify-oauth/types';
 
 /**
@@ -209,7 +210,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Step 8: Register webhooks (non-blocking)
-    registerWebhooksAsync(storeId, shopDomain, tokenData.access_token).catch(err => {
+    registerAllWebhooks(storeId, shopDomain, tokenData.access_token).catch(err => {
       console.error('Webhook registration failed (non-critical):', err);
     });
 

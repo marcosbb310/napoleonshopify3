@@ -8,6 +8,7 @@ import { useAuth, useCurrentStore } from '@/features/auth';
 import { useStoreConnection } from '@/features/shopify-integration/hooks/useStoreConnection';
 import { Toaster } from '@/shared/components/ui/sonner';
 import { SmartPricingProvider } from '@/features/pricing-engine';
+import { useQueryClient } from '@tanstack/react-query';
 
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -15,6 +16,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   const { currentStore } = useCurrentStore();
   const { isConnected, isLoading: isConnectionLoading } = useStoreConnection();
+  const queryClient = useQueryClient();
 
   // Save the current page on refresh/load for potential redirect after login
   useEffect(() => {
@@ -25,6 +27,29 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
       }
     }
   }, []);
+
+  // Prefetch common data when store is available
+  useEffect(() => {
+    if (currentStore) {
+      // Prefetch store metrics
+      queryClient.prefetchQuery({
+        queryKey: ['store-metrics', currentStore.id],
+        queryFn: async () => {
+          const response = await fetch(`/api/analytics/store-metrics?storeId=${currentStore.id}`);
+          return response.json();
+        }
+      });
+      
+      // Prefetch top performers
+      queryClient.prefetchQuery({
+        queryKey: ['top-performers', currentStore.id, 10],
+        queryFn: async () => {
+          const response = await fetch(`/api/analytics/top-performers?storeId=${currentStore.id}&limit=10`);
+          return response.json();
+        }
+      });
+    }
+  }, [currentStore, queryClient]);
 
   // Redirect if user is not authenticated
   useEffect(() => {

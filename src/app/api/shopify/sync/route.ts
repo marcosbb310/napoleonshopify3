@@ -79,9 +79,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: result.success,
       data: {
-        totalProducts: result.totalProducts,
-        syncedProducts: result.syncedProducts,
-        duration: result.duration,
+        productsCreated: result.productsCreated,
+        productsUpdated: result.productsUpdated,
         errors: result.errors,
       },
       error: result.success ? null : result.errors.join(', '),

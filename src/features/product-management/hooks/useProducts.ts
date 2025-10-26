@@ -3,7 +3,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuthenticatedFetch } from '@/shared/lib/apiClient';
-import { useCurrentStore } from '@/features/auth';
+import { useCurrentStore, useAuth } from '@/features/auth';
 import type { ProductWithPricing, ProductFilter, ProductPricing } from '../types';
 import type { ShopifyProduct } from '@/features/shopify-integration';
 import { getShopifyClient } from '@/features/shopify-integration';
@@ -54,7 +54,6 @@ function addPricingToProduct(shopifyProduct: ShopifyProduct): ProductWithPricing
 
 export function useProducts(filter?: ProductFilter) {
   // Import useAuth to check authentication status
-  const { useAuth } = require('@/features/auth');
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   
   // NEW AUTH: Get authenticated fetch that includes store ID
@@ -81,6 +80,7 @@ export function useProducts(filter?: ProductFilter) {
     queryKey: ['products', currentStore?.id], // Include store ID in cache key
     queryFn: async () => {
       console.log('📥 useProducts queryFn called with store:', currentStore?.id);
+      console.log('🔄 Fetching fresh products from Shopify API...');
       
       // Don't fetch if user is not authenticated
       if (!isAuthenticated) {
@@ -94,35 +94,66 @@ export function useProducts(filter?: ProductFilter) {
         throw new Error('No store selected. Please connect a Shopify store in Settings.');
       }
       
-      // Fetch via server-side proxy with authenticated store context
-      const res = await authenticatedFetch('/api/shopify/products', { cache: 'no-store' });
-      
-      if (!res.ok) {
-        // Get error message from response
-        let errorMessage = `HTTP error! status: ${res.status}`;
-        try {
-          const errorData = await res.json();
-          if (errorData?.error?.message) {
-            errorMessage = errorData.error.message;
+      try {
+        // Fetch via server-side proxy with authenticated store context
+        const res = await authenticatedFetch('/api/shopify/products', { cache: 'no-store' });
+        
+        if (!res.ok) {
+          // Get error message from response
+          let errorMessage = `HTTP error! status: ${res.status}`;
+          try {
+            const errorData = await res.json();
+            if (errorData?.error?.message) {
+              errorMessage = errorData.error.message;
+            }
+          } catch {
+            // Ignore JSON parse error, use default message
           }
-        } catch {
-          // Ignore JSON parse error, use default message
+          throw new Error(errorMessage);
         }
-        throw new Error(errorMessage);
-      }
-      
-      const response = await res.json();
+        
+        const response = await res.json();
 
-      if (!response.success || !response.data) {
-        console.error('Shopify API Error:', response?.error || {});
-        throw new Error(response?.error?.message || 'Failed to fetch products');
-      }
+        if (!response.success || !response.data) {
+          console.error('Shopify API Error:', response?.error || {});
+          throw new Error(response?.error?.message || 'Failed to fetch products');
+        }
 
-      return response.data || [];
+        console.log(`✅ Fetched ${response.data?.length || 0} products from Shopify`);
+        if (response.data?.length > 0) {
+          console.log('📊 First product price:', response.data[0].variants?.[0]?.price);
+        }
+        
+        return response.data || [];
+      } catch (error) {
+        // Handle specific error cases
+        if (error instanceof Error) {
+          if (error.message === 'Store is still loading') {
+            console.log('⏸️ Store is still loading, will retry when ready');
+            throw new Error('Store is still loading. Please wait...');
+          }
+          if (error.message === 'No store selected') {
+            console.log('⏸️ No store selected, redirecting to settings');
+            throw new Error('No store selected. Please connect a Shopify store in Settings.');
+          }
+        }
+        throw error;
+      }
     },
     enabled: !!isAuthenticated && !!currentStore?.id && !storeLoading && !authLoading, // Only fetch when user is authenticated, we have a store, and everything is loaded
     staleTime: 5 * 60 * 1000, // Data stays fresh for 5 minutes
     gcTime: 10 * 60 * 1000, // Cache persists for 10 minutes
+    retry: (failureCount, error) => {
+      // Don't retry if it's a store selection error
+      if (error instanceof Error && (
+        error.message.includes('No store selected') || 
+        error.message.includes('Store is still loading')
+      )) {
+        return false;
+      }
+      // Retry up to 3 times for other errors
+      return failureCount < 3;
+    },
   });
 
   // Transform Shopify products to ProductWithPricing with error handling

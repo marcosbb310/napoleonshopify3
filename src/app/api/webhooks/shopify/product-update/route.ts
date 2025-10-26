@@ -57,19 +57,19 @@ export async function POST(request: NextRequest) {
 
     // Parse product data
     const product = JSON.parse(body);
-    const webhookId = request.headers.get('x-shopify-webhook-id');
+    const webhookId = request.headers.get('x-shopify-webhook-id') || undefined;
     logger.info(`Product update webhook received: ${product.title} (ID: ${product.id})`, {
       webhookId,
     });
 
     // Extract new price from first variant
     if (!product.variants || product.variants.length === 0) {
-      logger.warn('No variants found in product', { webhookId });
+      logger.warn('No variants found in product', { webhookId: webhookId || undefined });
       return NextResponse.json({ warning: 'No variants found' });
     }
 
     const newPrice = parseFloat(product.variants[0].price);
-    logger.info(`New price detected: $${newPrice}`, { webhookId });
+    logger.info(`New price detected: $${newPrice}`, { webhookId: webhookId || undefined });
 
     // Calculate next price change date (today + 2 days)
     const nextPriceChangeDate = new Date();
@@ -109,15 +109,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Already processed' });
     }
 
-    // Mark webhook as processed
-    await supabaseAdmin
-      .from('processed_webhooks')
+    // Log webhook receipt
+    const { data: logEntry } = await supabaseAdmin
+      .from('webhook_logs')
       .insert({
-        webhook_id: webhookId,
         store_id: store.id,
         topic: 'products/update',
-        payload_hash: crypto.createHash('sha256').update(body).digest('hex'),
-      });
+        payload: product,
+        processed: false,
+        received_at: new Date().toISOString()
+      })
+      .select()
+      .single();
 
     // Update pricing_config in database
     const { data, error } = await supabaseAdmin
@@ -144,6 +147,15 @@ export async function POST(request: NextRequest) {
         warning: 'Product not in smart pricing system' 
       });
     }
+
+    // Mark as processed
+    await supabaseAdmin
+      .from('webhook_logs')
+      .update({
+        processed: true,
+        processed_at: new Date().toISOString()
+      })
+      .eq('id', logEntry.id);
 
     logger.info(`Pricing cycle reset for product ${product.id}`, { webhookId, storeId: store.id });
     logger.info(`Next price change: ${nextPriceChangeDate.toISOString()}`, { webhookId, storeId: store.id });

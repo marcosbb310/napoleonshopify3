@@ -71,51 +71,51 @@ export class ShopifyClient {
     const response = await this.request<{ products: Record<string, unknown>[] }>('/products.json?limit=250');
     
     if (!response.success || !response.data) {
-      return response as ShopifyApiResponse<ShopifyProduct[]>;
+      return response as unknown as ShopifyApiResponse<ShopifyProduct[]>;
     }
 
     // Transform Shopify API response to our format
     const transformedProducts: ShopifyProduct[] = response.data.products.map((product: Record<string, unknown>) => ({
-      id: product.id.toString(),
-      title: product.title,
-      handle: product.handle,
-      description: product.body_html || '',
-      vendor: product.vendor || '',
-      productType: product.product_type || '',
-      tags: product.tags ? product.tags.split(',').map((tag: string) => tag.trim()) : [],
+      id: product.id?.toString() || '',
+      title: product.title as string || '',
+      handle: product.handle as string || '',
+      description: product.body_html as string || '',
+      vendor: product.vendor as string || '',
+      productType: product.product_type as string || '',
+      tags: product.tags ? (product.tags as string).split(',').map((tag: string) => tag.trim()) : [],
       status: product.status as 'active' | 'draft' | 'archived',
-      images: product.images?.map((image: Record<string, unknown>) => ({
-        id: image.id.toString(),
-        productId: product.id.toString(),
-        src: image.src,
-        alt: image.alt || '',
-        width: image.width || 800,
-        height: image.height || 800,
-      })) || [],
-      variants: product.variants?.map((variant: Record<string, unknown>) => ({
-        id: variant.id.toString(),
-        productId: product.id.toString(),
-        title: variant.title,
-        sku: variant.sku || '',
-        price: variant.price,
-        compareAtPrice: variant.compare_at_price,
-        inventoryQuantity: variant.inventory_quantity || 0,
-        inventoryManagement: variant.inventory_management,
-        weight: variant.weight,
-        weightUnit: variant.weight_unit as 'g' | 'kg' | 'oz' | 'lb',
+      images: Array.isArray(product.images) ? product.images.map((image: Record<string, unknown>) => ({
+        id: image.id?.toString() || '',
+        productId: product.id?.toString() || '',
+        src: image.src as string || '',
+        alt: image.alt as string || '',
+        width: image.width as number || 800,
+        height: image.height as number || 800,
+      })) : [],
+      variants: Array.isArray(product.variants) ? product.variants.map((variant: Record<string, unknown>) => ({
+        id: variant.id?.toString() || '',
+        productId: product.id?.toString() || '',
+        title: variant.title as string || '',
+        sku: variant.sku as string || '',
+        price: variant.price as string || '0',
+        compareAtPrice: variant.compare_at_price as string || undefined,
+        inventoryQuantity: variant.inventory_quantity as number || 0,
+        inventoryManagement: variant.inventory_management as string || undefined,
+        weight: variant.weight as number || undefined,
+        weightUnit: variant.weight_unit as 'g' | 'kg' | 'oz' | 'lb' || undefined,
         image: variant.image ? {
-          id: variant.image.id.toString(),
-          productId: product.id.toString(),
-          src: variant.image.src,
-          alt: variant.image.alt || '',
-          width: variant.image.width || 800,
-          height: variant.image.height || 800,
+          id: (variant.image as Record<string, unknown>).id?.toString() || '',
+          productId: product.id?.toString() || '',
+          src: (variant.image as Record<string, unknown>).src as string || '',
+          alt: (variant.image as Record<string, unknown>).alt as string || '',
+          width: (variant.image as Record<string, unknown>).width as number || 800,
+          height: (variant.image as Record<string, unknown>).height as number || 800,
         } : undefined,
-        createdAt: variant.created_at,
-        updatedAt: variant.updated_at,
-      })) || [],
-      createdAt: product.created_at,
-      updatedAt: product.updated_at,
+        createdAt: variant.created_at as string || '',
+        updatedAt: variant.updated_at as string || '',
+      })) : [],
+      createdAt: product.created_at as string || '',
+      updatedAt: product.updated_at as string || '',
     }));
 
     return {

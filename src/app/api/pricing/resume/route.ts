@@ -4,6 +4,7 @@ import { createAdminClient } from '@/shared/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
+    const supabaseAdmin = createAdminClient();
     const body = await request.json();
     const { productId, resumeOption } = body;
 
@@ -62,8 +63,8 @@ export async function POST(request: NextRequest) {
 
     // Determine price based on choice
     const newPrice = resumeOption === 'base'
-      ? config.pre_smart_pricing_price || product.starting_price
-      : config.last_smart_pricing_price || product.current_price;
+      ? config.pre_smart_pricing_price || (product as any).starting_price
+      : config.last_smart_pricing_price || (product as any).current_price;
 
     // Update pricing config
     await supabaseAdmin
@@ -72,6 +73,8 @@ export async function POST(request: NextRequest) {
         auto_pricing_enabled: true,
         current_state: 'increasing',
         revert_wait_until_date: null,
+        is_first_increase: true, // NEW: Treat resume as first increase
+        next_price_change_date: new Date().toISOString(), // NEW: Immediate run
       })
       .eq('product_id', product.id);
 
@@ -90,7 +93,7 @@ export async function POST(request: NextRequest) {
       resumeOption,
       snapshot: {
         productId,
-        price: product.current_price,
+        price: (product as any).current_price,
         auto_pricing_enabled: false,
       },
     });

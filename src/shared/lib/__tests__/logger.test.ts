@@ -3,9 +3,9 @@ import { logger } from '../logger';
 
 describe('Logger', () => {
   let consoleSpy: {
-    log: ReturnType<typeof vi.spyOn>;
-    warn: ReturnType<typeof vi.spyOn>;
-    error: ReturnType<typeof vi.spyOn>;
+    log: any;
+    warn: any;
+    error: any;
   };
 
   beforeEach(() => {
@@ -65,7 +65,7 @@ describe('Logger', () => {
     const originalEnv = process.env.NODE_ENV;
     
     // Test in development
-    process.env.NODE_ENV = 'development';
+    vi.stubEnv('NODE_ENV', 'development');
     logger.debug('Debug message');
     expect(consoleSpy.log).toHaveBeenCalledWith(
       expect.stringContaining('[DEBUG]')
@@ -73,11 +73,11 @@ describe('Logger', () => {
     
     // Test in production
     consoleSpy.log.mockClear();
-    process.env.NODE_ENV = 'production';
+    vi.stubEnv('NODE_ENV', 'production');
     logger.debug('Debug message');
     expect(consoleSpy.log).not.toHaveBeenCalled();
     
-    process.env.NODE_ENV = originalEnv;
+    vi.stubEnv('NODE_ENV', originalEnv);
   });
 
   it('should generate unique request IDs', () => {

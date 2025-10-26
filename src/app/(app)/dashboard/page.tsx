@@ -9,6 +9,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { DollarSign, TrendingUp, TrendingDown, Package, AlertTriangle, CheckCircle2, ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
 import { DashboardSkeleton, DateRangePicker } from '@/shared/components';
 import { useAuth } from '@/features/auth';
+import { useStoreMetrics } from '@/features/analytics-dashboard';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { useRouter } from 'next/navigation';
 import { DateRange } from 'react-day-picker';
@@ -24,20 +25,8 @@ export default function DashboardPage() {
     to: new Date(),
   });
   
-  // TODO: Replace with real data from Shopify API
-  const isLoading = false; // This would come from your data fetching hook
-  const metrics = {
-    addedRevenue: 12450, // Revenue gained from smart pricing
-    addedRevenueChange: 23.5, // % increase from smart pricing
-    addedProfit: 3720, // Profit gained from smart pricing
-    addedProfitChange: 31.2, // % increase in profit margin
-    optimizedProducts: 47, // Products with optimized pricing
-    optimizationRate: 78, // % of products optimized
-    baselineRevenue: 52847, // What revenue would have been without algorithm
-    baselineProfit: 11924, // What profit would have been without algorithm
-    pricesChangedToday: 12, // Number of prices changed today
-    productsNeedingAttention: 3, // Products that need review
-  };
+  // Get real metrics from analytics API
+  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useStoreMetrics();
 
   // Chart data for revenue and profit trends
   const chartData = [
@@ -61,9 +50,38 @@ export default function DashboardPage() {
   };
 
   // Show skeleton during data loading or auth check
-  if (isLoading || authLoading) {
+  if (metricsLoading || authLoading) {
     return <DashboardSkeleton />;
   }
+
+  // Show error state if metrics failed to load
+  if (metricsError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <h2 className="text-lg font-semibold mb-2">Unable to load dashboard data</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          {metricsError.message || 'Failed to fetch analytics data'}
+        </p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // Ensure metrics has default values
+  const safeMetrics = {
+    totalRevenue: metrics?.totalRevenue || 0,
+    addedRevenue: metrics?.addedRevenue || 0,
+    addedRevenueChange: metrics?.addedRevenueChange || 0,
+    baselineRevenue: metrics?.baselineRevenue || 0,
+    optimizedProducts: metrics?.optimizedProducts || 0,
+    priceChangesToday: metrics?.priceChangesToday || 0,
+    ...metrics
+  };
 
   return (
     <div className="space-y-4">
@@ -73,7 +91,7 @@ export default function DashboardPage() {
               <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
             </div>
             <p className="text-sm text-muted-foreground">
-              Your smart pricing is actively optimizing {metrics.optimizedProducts} products
+              Your smart pricing is actively optimizing {safeMetrics.optimizedProducts} products
             </p>
           </div>
           <DateRangePicker
@@ -87,7 +105,7 @@ export default function DashboardPage() {
         <Card className="border-2 border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 dark:from-emerald-950 dark:via-green-950 dark:to-teal-950">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
-              Profit This Month
+              Revenue This Month
             </CardTitle>
             <div className="rounded-full bg-emerald-100 dark:bg-emerald-900 p-2">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
@@ -95,18 +113,18 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="text-4xl font-bold text-emerald-700 dark:text-emerald-400">
-              +${metrics.addedProfit.toLocaleString()}
+              +${safeMetrics.addedRevenue.toLocaleString()}
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-0">
-                +{metrics.addedProfitChange}%
+                +{safeMetrics.addedRevenueChange}%
               </Badge>
               <span className="text-xs text-emerald-700/70 dark:text-emerald-300/70">more than baseline</span>
             </div>
             <p className="text-xs text-emerald-700/80 dark:text-emerald-300/80 pt-2 leading-relaxed">
-              Compared to if your prices had stayed at their starting point, our algorithm has increased your profit by{' '}
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{metrics.addedProfitChange}%</span>.
-              It&apos;s adjusted {metrics.pricesChangedToday} prices today to keep maximizing your revenue.
+              Compared to if your prices had stayed at their starting point, our algorithm has increased your revenue by{' '}
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{safeMetrics.addedRevenueChange}%</span>.
+              It&apos;s adjusted {safeMetrics.priceChangesToday} prices today to keep maximizing your revenue.
             </p>
           </CardContent>
         </Card>
@@ -122,16 +140,16 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="text-4xl font-bold text-emerald-700 dark:text-emerald-400">
-              +${metrics.addedRevenue.toLocaleString()}
+              +${safeMetrics.totalRevenue.toLocaleString()}
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border-0">
-                +{metrics.addedRevenueChange}%
+                +{safeMetrics.addedRevenueChange}%
               </Badge>
               <span className="text-xs text-emerald-700/70 dark:text-emerald-300/70">vs static baseline</span>
             </div>
             <p className="text-xs text-emerald-700/60 dark:text-emerald-300/60 pt-1">
-              You&apos;d have ${metrics.baselineRevenue.toLocaleString()} without algorithm
+              You&apos;d have ${safeMetrics.baselineRevenue.toLocaleString()} without algorithm
             </p>
           </CardContent>
         </Card>
@@ -147,15 +165,15 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="text-4xl font-bold text-slate-700 dark:text-slate-300">
-              ${metrics.baselineProfit.toLocaleString()}
+              ${safeMetrics.baselineRevenue.toLocaleString()}
             </div>
             <p className="text-xs text-slate-600 dark:text-slate-400">
-              Your profit without our algorithm
+              Your revenue without our algorithm
             </p>
             <div className="flex items-center gap-1.5 pt-1">
               <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                You&apos;re making ${metrics.addedProfit.toLocaleString()} more (+{metrics.addedProfitChange}%)
+                You&apos;re making ${safeMetrics.addedRevenue.toLocaleString()} more (+{safeMetrics.addedRevenueChange}%)
               </span>
             </div>
           </CardContent>

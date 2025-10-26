@@ -26,7 +26,8 @@ import {
 } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useStores, useStoreData } from '@/features/shopify-integration';
+import { useStores } from '@/features/shopify-integration';
+import { useStoreMetrics, useTopPerformers } from '@/features/analytics-dashboard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
 import Link from 'next/link';
 
@@ -51,7 +52,8 @@ export default function AnalyticsPage() {
   const { stores, isLoading: storesLoading } = useStores();
   
   // Get store analytics data
-  const { analytics, isLoading: analyticsLoading, error: analyticsError } = useStoreData(selectedStoreId);
+  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useStoreMetrics();
+  const { data: topPerformers, isLoading: performersLoading, error: performersError } = useTopPerformers(10);
   
   // Auto-select first store
   useEffect(() => {
@@ -60,8 +62,8 @@ export default function AnalyticsPage() {
     }
   }, [stores, selectedStoreId]);
 
-  // Sample data for comprehensive analytics with previous period data
-  const individualProducts = [
+  // Use real data from topPerformers, fallback to empty array if loading
+  const individualProducts = topPerformers || [
     {
       id: 'PROD-001',
       name: 'Classic Cotton T-Shirt',
@@ -314,11 +316,11 @@ export default function AnalyticsPage() {
     
     // Create array with relevance scores
     const scoredProducts = individualProducts
-      .map(product => {
+      .map((product: any) => {
         const name = (product.name as string).toLowerCase();
         const vendor = product.vendor.toLowerCase();
         const productType = product.productType.toLowerCase();
-        const tags = product.tags.map(t => t.toLowerCase());
+        const tags = product.tags.map((t: string) => t.toLowerCase());
         
         let score = 0;
         
@@ -334,11 +336,11 @@ export default function AnalyticsPage() {
         }
         
         // Tag scoring
-        if (tags.some(tag => tag === query)) {
+        if (tags.some((tag: string) => tag === query)) {
           score += 150;
-        } else if (tags.some(tag => tag.startsWith(query))) {
+        } else if (tags.some((tag: string) => tag.startsWith(query))) {
           score += 100;
-        } else if (tags.some(tag => tag.includes(query))) {
+        } else if (tags.some((tag: string) => tag.includes(query))) {
           score += 75;
         }
         
@@ -362,9 +364,9 @@ export default function AnalyticsPage() {
         
         return { product, score };
       })
-      .filter(item => item.score > 0) // Only keep products with matches
-      .sort((a, b) => b.score - a.score) // Sort by relevance score
-      .map(item => item.product); // Extract products
+      .filter((item: any) => item.score > 0) // Only keep products with matches
+      .sort((a: any, b: any) => b.score - a.score) // Sort by relevance score
+      .map((item: any) => item.product); // Extract products
     
     return scoredProducts;
   }, [searchQuery, individualProducts]);
@@ -468,7 +470,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Loading State */}
-      {analyticsLoading && (
+      {(metricsLoading || performersLoading) && (
         <Card className="flex h-64 items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
@@ -478,18 +480,18 @@ export default function AnalyticsPage() {
       )}
 
       {/* Error State */}
-      {analyticsError && (
+      {(metricsError || performersError) && (
         <Card className="flex h-64 items-center justify-center">
           <div className="text-center">
             <p className="text-lg font-medium text-destructive">Failed to load analytics</p>
-            <p className="text-sm text-muted-foreground mb-4">{analyticsError.message}</p>
+            <p className="text-sm text-muted-foreground mb-4">{metricsError?.message || performersError?.message}</p>
             <Button onClick={() => window.location.reload()}>Retry</Button>
           </div>
         </Card>
       )}
 
       {/* Analytics Content */}
-      {!analyticsLoading && !analyticsError && (
+      {!metricsLoading && !performersLoading && !metricsError && !performersError && metrics && topPerformers && (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="products">Product Analytics</TabsTrigger>
@@ -541,7 +543,7 @@ export default function AnalyticsPage() {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    {filteredProducts.map((product) => {
+                    {filteredProducts.map((product: any) => {
                       // Calculate comparisons
                       const profitDelta = product.currentPeriod.profit - product.previousPeriod.profit;
                       const profitDeltaPct = ((profitDelta / product.previousPeriod.profit) * 100).toFixed(1);
@@ -732,7 +734,7 @@ export default function AnalyticsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  {filteredProducts.map((product) => (
+                  {filteredProducts.map((product: any) => (
                     <div key={product.id} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
@@ -767,7 +769,7 @@ export default function AnalyticsPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {product.priceHistory.map((entry, index) => {
+                            {product.priceHistory.map((entry: any, index: number) => {
                               const prevEntry = index > 0 ? product.priceHistory[index - 1] : null;
                               const priceChange = prevEntry ? ((entry.price - prevEntry.price) / prevEntry.price) * 100 : 0;
                               const salesChange = prevEntry ? ((entry.sales - prevEntry.sales) / prevEntry.sales) * 100 : 0;
@@ -811,19 +813,19 @@ export default function AnalyticsPage() {
                         <div className="bg-muted/50 rounded-lg p-3">
                           <p className="text-xs text-muted-foreground mb-1">Highest Price</p>
                           <p className="text-lg font-semibold">
-                            ${Math.max(...product.priceHistory.map(h => h.price)).toFixed(2)}
+                            ${Math.max(...product.priceHistory.map((h: any) => h.price)).toFixed(2)}
                           </p>
                         </div>
                         <div className="bg-muted/50 rounded-lg p-3">
                           <p className="text-xs text-muted-foreground mb-1">Best Sales Month</p>
                           <p className="text-lg font-semibold">
-                            {Math.max(...product.priceHistory.map(h => h.sales))} units
+                            {Math.max(...product.priceHistory.map((h: any) => h.sales))} units
                           </p>
                         </div>
                         <div className="bg-muted/50 rounded-lg p-3">
                           <p className="text-xs text-muted-foreground mb-1">Total Historical Revenue</p>
                           <p className="text-lg font-semibold">
-                            ${product.priceHistory.reduce((sum, h) => sum + h.revenue, 0).toLocaleString()}
+                            ${product.priceHistory.reduce((sum: any, h: any) => sum + h.revenue, 0).toLocaleString()}
                           </p>
                         </div>
                       </div>
@@ -1005,7 +1007,7 @@ export default function AnalyticsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {individualProducts.map((product) => (
+                    {individualProducts.map((product: any) => (
                       <div key={product.id} className="flex items-center justify-between">
                         <div>
                           <p className="font-medium">{product.name as string}</p>
@@ -1040,7 +1042,7 @@ export default function AnalyticsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {individualProducts.map((product) => {
+                    {individualProducts.map((product: any) => {
                       const priceChange = ((product.currentPrice - product.avgPrice) / product.avgPrice) * 100;
                       return (
                         <div key={product.id} className="flex items-center justify-between">

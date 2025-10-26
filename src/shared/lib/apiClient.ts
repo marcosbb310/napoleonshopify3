@@ -1,59 +1,46 @@
-'use client'
-import { useCurrentStore } from '@/features/auth'
+import { useCurrentStore } from '@/features/auth';
 
-export function createAuthenticatedFetch(storeId?: string) {
-  return async (url: string, options: RequestInit = {}) => {
-    const headers = new Headers()
-    headers.set('Content-Type', 'application/json')
-    
-    // Add existing headers
-    if (options.headers) {
-      if (options.headers instanceof Headers) {
-        options.headers.forEach((value, key) => {
-          headers.set(key, value)
-        })
-      } else if (Array.isArray(options.headers)) {
-        options.headers.forEach(([key, value]) => {
-          headers.set(key, value)
-        })
-      } else {
-        Object.entries(options.headers).forEach(([key, value]) => {
-          if (value) {
-            headers.set(key, value)
-          }
-        })
-      }
-    }
-    
-    // Add store ID header if provided
-    if (storeId) {
-      headers.set('x-store-id', storeId)
-    }
-    
-    return fetch(url, {
-      ...options,
-      headers,
-    })
-  }
-}
+// Request deduplication cache
+const pendingRequests = new Map<string, Promise<Response>>();
 
-// Hook version for components
 export function useAuthenticatedFetch() {
-  const { currentStore } = useCurrentStore()
+  const { currentStore, isLoading } = useCurrentStore();
   
-  return (url: string, options: RequestInit = {}) => {
-    if (!currentStore?.id) {
-      console.error('❌ No store selected for API call')
-      throw new Error('No store selected. Please connect a Shopify store in Settings.')
+  return async (url: string, options: RequestInit = {}) => {
+    // Don't make requests if store is still loading
+    if (isLoading) {
+      throw new Error('Store is still loading');
     }
     
-    console.log('📤 API call with store:', {
-      storeId: currentStore.id,
-      domain: currentStore.shop_domain,
-      url
-    })
+    // Don't make requests if no store is selected
+    if (!currentStore?.id) {
+      throw new Error('No store selected');
+    }
     
-    return createAuthenticatedFetch(currentStore.id)(url, options)
-  }
+    // Create cache key
+    const cacheKey = `${url}-${JSON.stringify(options)}`;
+    
+    // Check if request is already pending
+    if (pendingRequests.has(cacheKey)) {
+      return pendingRequests.get(cacheKey)!.then(r => r.clone());
+    }
+    
+    // Make request
+    const headers = new Headers(options.headers);
+    headers.set('x-store-id', currentStore.id);
+    
+    const requestPromise = fetch(url, {
+      ...options,
+      headers
+    });
+    
+    pendingRequests.set(cacheKey, requestPromise);
+    
+    // Clean up after request completes
+    requestPromise.finally(() => {
+      pendingRequests.delete(cacheKey);
+    });
+    
+    return requestPromise;
+  };
 }
-

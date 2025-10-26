@@ -36,6 +36,7 @@ interface PricingConfig {
   current_price?: number;
   base_price?: number;
   price_change_frequency_hours?: number;
+  is_first_increase?: boolean; // NEW
 }
 
 interface AlgorithmStats {
@@ -152,15 +153,24 @@ async function processProduct(product: ProductRow, config: PricingConfig, stats:
   const revenue = await getRevenue(product.id, periodHours);
 
   // Step 5: Decide what to do
-  if (!revenue.hasSufficientData) {
-    // First increase - no data yet
-    await increasePrice(product, config, stats, {} as RevenueData, shopDomain, accessToken, storeId);
+  const isFirstIncrease = config.is_first_increase !== false; // Default to true if undefined
+
+  if (isFirstIncrease) {
+    // FIRST INCREASE: No revenue check needed, increase immediately
+    console.log(`🚀 First increase for ${product.title} - no revenue check needed`);
+    await increasePrice(product, config, stats, null, shopDomain, accessToken, storeId, true);
+  } else if (!revenue.hasSufficientData) {
+    // Not enough data to make decision - increase anyway (optimistic)
+    console.log(`📊 Insufficient revenue data for ${product.title} - increasing optimistically`);
+    await increasePrice(product, config, stats, revenue, shopDomain, accessToken, storeId, false);
   } else if (revenue.changePercent < -(config.revenue_drop_threshold || 1.0)) {
-    // Revenue dropped - revert
+    // Revenue dropped significantly - revert
+    console.log(`📉 Revenue dropped ${revenue.changePercent.toFixed(1)}% for ${product.title} - reverting`);
     await revertPrice(product, config, stats, revenue, shopDomain, accessToken, storeId);
   } else {
     // Revenue stable/up - increase
-    await increasePrice(product, config, stats, revenue, shopDomain, accessToken, storeId);
+    console.log(`📈 Revenue ${revenue.changePercent >= 0 ? 'up' : 'stable'} for ${product.title} - increasing`);
+    await increasePrice(product, config, stats, revenue, shopDomain, accessToken, storeId, false);
   }
 }
 
@@ -175,22 +185,39 @@ async function getRevenue(productId: string, periodHours: number) {
 
   const { data: currentData } = await supabaseAdmin
     .from('sales_data')
-    .select('revenue')
+    .select('revenue, units_sold')
     .eq('product_id', productId)
     .gte('date', currentStart.toISOString().split('T')[0]);
 
   const { data: previousData } = await supabaseAdmin
     .from('sales_data')
-    .select('revenue')
+    .select('revenue, units_sold')
     .eq('product_id', productId)
     .gte('date', previousStart.toISOString().split('T')[0])
     .lt('date', currentStart.toISOString().split('T')[0]);
 
   const currentRevenue = currentData?.reduce((sum, r) => sum + (r.revenue || 0), 0) || 0;
   const previousRevenue = previousData?.reduce((sum, r) => sum + (r.revenue || 0), 0) || 0;
+  
+  // Require at least 2 sales in each period for valid comparison
+  const currentSales = currentData?.reduce((sum, r) => sum + (r.units_sold || 0), 0) || 0;
+  const previousSales = previousData?.reduce((sum, r) => sum + (r.units_sold || 0), 0) || 0;
+  
+  const hasSufficientData = currentRevenue > 0 && previousRevenue > 0 && 
+                           currentSales >= 2 && previousSales >= 2;
+  
+  const changePercent = previousRevenue > 0 
+    ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 
+    : 0;
 
-  const hasSufficientData = currentRevenue > 0 && previousRevenue > 0;
-  const changePercent = previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0;
+  console.log(`📊 Revenue data for product ${productId}:`, {
+    currentRevenue,
+    previousRevenue,
+    currentSales,
+    previousSales,
+    changePercent: changePercent.toFixed(1) + '%',
+    hasSufficientData,
+  });
 
   return { currentRevenue, previousRevenue, changePercent, hasSufficientData };
 }
@@ -198,7 +225,16 @@ async function getRevenue(productId: string, periodHours: number) {
 /**
  * Increase price
  */
-async function increasePrice(product: ProductRow, config: PricingConfig, stats: AlgorithmStats, revenue: RevenueData | null, shopDomain: string, accessToken: string, storeId: string) {
+async function increasePrice(
+  product: ProductRow, 
+  config: PricingConfig, 
+  stats: AlgorithmStats, 
+  revenue: RevenueData | null, 
+  shopDomain: string, 
+  accessToken: string, 
+  storeId: string,
+  isFirstIncrease: boolean // NEW parameter
+) {
   const supabaseAdmin = createAdminClient();
   const newPrice = product.current_price * (1 + (config.increment_percentage || 5.0) / 100);
   const percentIncrease = ((newPrice - product.starting_price) / product.starting_price) * 100;
@@ -209,13 +245,31 @@ async function increasePrice(product: ProductRow, config: PricingConfig, stats: 
     await updatePrice(product, config, maxPrice, 'increase', 'Hit max cap', revenue, shopDomain, accessToken, storeId);
     await supabaseAdmin
       .from('pricing_config')
-      .update({ current_state: 'at_max_cap' })
+      .update({ 
+        current_state: 'at_max_cap',
+        is_first_increase: false, // NEW: Clear flag
+      })
       .eq('product_id', product.id);
     stats.increased++;
     return;
   }
 
-  await updatePrice(product, config, newPrice, 'increase', revenue ? `Revenue ${(revenue as Record<string, unknown>).changePercent >= 0 ? 'up' : 'stable'}` : 'First increase', revenue, shopDomain, accessToken, storeId);
+  const reason = isFirstIncrease 
+    ? 'First price increase (no revenue check)'
+    : revenue 
+      ? `Revenue ${(revenue as any).changePercent >= 0 ? 'up' : 'stable'}` 
+      : 'Insufficient data (optimistic increase)';
+
+  await updatePrice(product, config, newPrice, 'increase', reason, revenue, shopDomain, accessToken, storeId);
+  
+  // Clear first increase flag
+  if (isFirstIncrease) {
+    await supabaseAdmin
+      .from('pricing_config')
+      .update({ is_first_increase: false })
+      .eq('product_id', product.id);
+  }
+  
   stats.increased++;
 }
 
@@ -237,7 +291,7 @@ async function revertPrice(product: ProductRow, config: PricingConfig, stats: Al
 
   const previousPrice = history?.old_price || product.starting_price;
 
-  await updatePrice(product, config, previousPrice, 'revert', `Revenue dropped ${(revenue as Record<string, unknown>).changePercent.toFixed(1)}%`, revenue, shopDomain, accessToken, storeId);
+  await updatePrice(product, config, previousPrice, 'revert', `Revenue dropped ${(revenue as any).changePercent?.toFixed(1) || '0.0'}%`, revenue, shopDomain, accessToken, storeId);
 
   // Set waiting state (updatePrice already set next_price_change_date)
   const waitUntil = new Date();

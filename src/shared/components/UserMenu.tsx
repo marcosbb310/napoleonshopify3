@@ -77,11 +77,11 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="flex items-center gap-2 h-auto py-2">
           <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="text-sm font-medium">{user?.name?.[0] || 'D'}</span>
+            <span className="text-sm font-medium">{user?.email?.[0] || 'D'}</span>
           </div>
           <div className="hidden md:flex flex-col items-start">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium leading-none">{user?.name || 'Demo User'}</span>
+              <span className="text-sm font-medium leading-none">{user?.email || 'Demo User'}</span>
               {userPlan.tier === 'pro' && (
                 <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4">Pro</Badge>
               )}
@@ -100,7 +100,7 @@ export function UserMenu() {
           <div className="flex flex-col space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{user?.name || 'Demo User'}</p>
+                <p className="text-sm font-medium leading-none">{user?.email || 'Demo User'}</p>
                 <p className="text-xs leading-none text-muted-foreground">
                   {user?.email || 'demo@example.com'}
                 </p>

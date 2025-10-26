@@ -14,7 +14,7 @@ describe('Shopify Integration Tests', () => {
 
   describe('ShopifyClient', () => {
     it('should fetch products successfully', async () => {
-      (fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
+      (fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => mockShopifyProducts,
       });
@@ -32,7 +32,7 @@ describe('Shopify Integration Tests', () => {
     });
 
     it('should handle API errors gracefully', async () => {
-      (fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
+      (fetch as any).mockResolvedValueOnce({
         ok: false,
         status: 401,
         json: async () => ({ errors: 'Unauthorized' }),
@@ -50,7 +50,7 @@ describe('Shopify Integration Tests', () => {
     });
 
     it('should update product price successfully', async () => {
-      (fetch as jest.MockedFunction<typeof fetch>)
+      (fetch as any)
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ product: { variants: [{ id: 789 }] } }),
@@ -78,7 +78,7 @@ describe('Shopify Integration Tests', () => {
       expect(typeof syncProductsFromShopify).toBe('function');
       
       // Test with mocked data
-      (fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
+      (fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => mockShopifyProducts,
       });

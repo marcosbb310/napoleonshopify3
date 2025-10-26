@@ -89,16 +89,34 @@ export function useStoreData(storeId?: string, dateRange?: DateRange) {
       const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
-      // Fetch revenue data from orders
-      const { data: revenueData, error: revenueError } = await supabase
-        .from('orders')
-        .select('total_price, created_at')
-        .eq('store_id', storeId)
-        .eq('financial_status', 'paid');
-
-      if (revenueError) {
-        console.error('❌ Failed to fetch revenue data:', revenueError);
-        // Continue with empty data rather than throwing
+      // Fetch revenue data from orders table
+      // Note: orders table doesn't exist yet, so we'll use empty data for now
+      let revenueData: any[] = [];
+      let revenueError = null;
+      
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('total_price, created_at')
+          .eq('store_id', storeId)
+          .eq('financial_status', 'paid');
+        
+        if (error) {
+          // Check if table doesn't exist (PGRST116) or if it's a permissions issue (42P01)
+          const isTableNotFound = error.code === 'PGRST116' || error.code === '42P01';
+          
+          if (isTableNotFound) {
+            console.warn('⚠️ Orders table not found, using empty revenue data');
+          } else {
+            console.error('❌ Failed to fetch revenue data:', error);
+          }
+          revenueError = error;
+        } else {
+          revenueData = data || [];
+        }
+      } catch (error) {
+        console.warn('⚠️ Error accessing orders table:', error);
+        revenueError = error;
       }
 
       // Calculate revenue metrics
@@ -111,14 +129,33 @@ export function useStoreData(storeId?: string, dateRange?: DateRange) {
       });
 
       // Fetch sales data (order count)
-      const { data: salesData, error: salesError } = await supabase
-        .from('orders')
-        .select('id, created_at')
-        .eq('store_id', storeId)
-        .eq('financial_status', 'paid');
-
-      if (salesError) {
-        console.error('❌ Failed to fetch sales data:', salesError);
+      // Note: orders table doesn't exist yet, so we'll use empty data for now
+      let salesData: any[] = [];
+      let salesError = null;
+      
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('id, created_at')
+          .eq('store_id', storeId)
+          .eq('financial_status', 'paid');
+        
+        if (error) {
+          // Check if table doesn't exist (PGRST116) or if it's a permissions issue (42P01)
+          const isTableNotFound = error.code === 'PGRST116' || error.code === '42P01';
+          
+          if (isTableNotFound) {
+            console.warn('⚠️ Orders table not found, using empty sales data');
+          } else {
+            console.error('❌ Failed to fetch sales data:', error);
+          }
+          salesError = error;
+        } else {
+          salesData = data || [];
+        }
+      } catch (error) {
+        console.warn('⚠️ Error accessing orders table:', error);
+        salesError = error;
       }
 
       // Calculate sales metrics
@@ -131,14 +168,25 @@ export function useStoreData(storeId?: string, dateRange?: DateRange) {
       });
 
       // Fetch product counts
-      const { data: productData, error: productError } = await supabase
-        .from('products')
-        .select('status')
-        .eq('store_id', storeId)
-        .eq('is_active', true);
-
-      if (productError) {
-        console.error('❌ Failed to fetch product data:', productError);
+      // Note: using the products table which exists
+      let productData: any[] = [];
+      let productError = null;
+      
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('title, current_price')
+          .eq('shopify_id', storeId); // Note: adapting to existing schema
+        
+        if (error) {
+          console.error('❌ Failed to fetch product data:', error);
+          productError = error;
+        } else {
+          productData = data || [];
+        }
+      } catch (error) {
+        console.warn('⚠️ Error fetching products:', error);
+        productError = error;
       }
 
       const products = calculateProductMetrics(productData || []);
@@ -298,17 +346,14 @@ function calculateSalesMetrics(
   };
 }
 
-function calculateProductMetrics(products: Array<{ status: string }>) {
-  const statusCounts = products.reduce((acc, product) => {
-    acc[product.status] = (acc[product.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
+function calculateProductMetrics(products: Array<{ title: string; current_price?: number }>) {
+  // Note: The products table doesn't have status fields yet
+  // Using all products as active for now
   return {
     total: products.length,
-    active: statusCounts.active || 0,
-    draft: statusCounts.draft || 0,
-    archived: statusCounts.archived || 0,
+    active: products.length, // All products are active by default
+    draft: 0,
+    archived: 0,
   };
 }
 

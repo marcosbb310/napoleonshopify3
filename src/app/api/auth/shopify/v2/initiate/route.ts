@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: validation.error || 'Invalid shop domain',
-          errorCode: validation.errorCode || 'INVALID_SHOP_DOMAIN',
+          errorCode: (validation.errorCode as any) || 'INVALID_SHOP_DOMAIN',
         },
         { status: 400 }
       );

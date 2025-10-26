@@ -11,6 +11,7 @@ import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { useAuth } from '../hooks/useAuth';
+import { createClient } from '@/shared/lib/supabase';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -21,8 +22,9 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const router = useRouter();
-  const { login, isLoading } = useAuth();
+  const { isLoading } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
@@ -35,10 +37,23 @@ export function LoginForm() {
   const onSubmit = async (data: LoginFormData) => {
     try {
       setError(null);
-      await login(data);
+      setIsSubmitting(true);
+      
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
       router.push('/dashboard');
-    } catch {
+    } catch (err) {
       setError('Invalid credentials. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -86,8 +101,8 @@ export function LoginForm() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Signing in...' : 'Sign In'}
+          <Button type="submit" className="w-full" disabled={isLoading || isSubmitting}>
+            {isLoading || isSubmitting ? 'Signing in...' : 'Sign In'}
           </Button>
           
           <p className="text-xs text-muted-foreground text-center mt-4">

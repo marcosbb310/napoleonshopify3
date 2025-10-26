@@ -16,7 +16,10 @@ export default function GradientMenu() {
         {menuItems.map(({ title, icon, gradientFrom, gradientTo }, idx) => (
           <li
             key={idx}
-            style={{ '--gradient-from': gradientFrom, '--gradient-to': gradientTo }}
+            style={{ 
+              '--gradient-from': gradientFrom, 
+              '--gradient-to': gradientTo 
+            } as React.CSSProperties}
             className="relative w-[60px] h-[60px] bg-white shadow-lg rounded-full flex items-center justify-center transition-all duration-500 hover:w-[180px] hover:shadow-none group cursor-pointer"
           >
             {/* Gradient background on hover */}

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider, QueryProvider } from "@/shared/components";
 import { Toaster } from "@/shared/components/ui/sonner";
+import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 // Environment validation is handled in middleware and API routes
 // No need to validate in layout as it can cause SSR issues
 
@@ -32,15 +33,17 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <QueryProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="light"
-            enableSystem
-            disableTransitionOnChange
-          >
-            {children}
-            <Toaster />
-          </ThemeProvider>
+          <ErrorBoundary>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="light"
+              enableSystem
+              disableTransitionOnChange
+            >
+              {children}
+              <Toaster />
+            </ThemeProvider>
+          </ErrorBoundary>
         </QueryProvider>
       </body>
     </html>

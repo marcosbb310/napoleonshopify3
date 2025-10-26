@@ -4,10 +4,10 @@
 import { useAuth } from '@/features/auth';
 import { AuthModal } from '@/features/auth/components/AuthModal';
 import { Button } from '@/shared/components/ui/button';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function HomePage() {
+function HomePageContent() {
   const { isAuthenticated, isLoading, error } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -124,5 +124,20 @@ export default function HomePage() {
 
       <AuthModal open={showAuth} onOpenChange={setShowAuth} />
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    }>
+      <HomePageContent />
+    </Suspense>
   );
 }

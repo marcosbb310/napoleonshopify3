@@ -14,6 +14,7 @@ interface ProductSnapshot {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabaseAdmin = createAdminClient();
     const body = await request.json();
     const { productSnapshots } = body as { productSnapshots: ProductSnapshot[] };
 
@@ -27,16 +28,16 @@ export async function POST(request: NextRequest) {
     // Restore each product to its previous state
     for (const snapshot of productSnapshots) {
       // Update pricing config
-      const configUpdates: Record<string, string | boolean> = {
+      const configUpdates: Record<string, string | boolean | null> = {
         auto_pricing_enabled: snapshot.auto_pricing_enabled,
         current_state: snapshot.current_state || 'increasing',
       };
 
       if (snapshot.next_price_change_date !== undefined) {
-        configUpdates.next_price_change_date = snapshot.next_price_change_date;
+        configUpdates.next_price_change_date = snapshot.next_price_change_date || null;
       }
       if (snapshot.revert_wait_until_date !== undefined) {
-        configUpdates.revert_wait_until_date = snapshot.revert_wait_until_date;
+        configUpdates.revert_wait_until_date = snapshot.revert_wait_until_date || null;
       }
 
       await supabaseAdmin

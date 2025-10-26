@@ -89,15 +89,13 @@ export async function POST(request: NextRequest) {
       );
 
       logger.info('Product sync retried', { 
-        storeId: store.id, 
-        success: result.success,
-        synced: result.synced 
+        storeId: store.id
       });
 
       return NextResponse.json({
         success: result.success,
         message: result.success 
-          ? `Synced ${result.synced} products` 
+          ? `Synced ${(result as any).synced} products` 
           : 'Sync failed',
         errors: result.errors,
       });

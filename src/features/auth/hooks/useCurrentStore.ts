@@ -11,51 +11,28 @@ export function useCurrentStore() {
 
   // Load from localStorage on mount AND sync with stores
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !stores) return;
     
-    try {
-      const saved = localStorage.getItem('selected-store-id')
-      console.log('🔍 Store selection check:', {
-        saved,
-        availableStores: stores?.map(s => ({ id: s.id, domain: s.shop_domain })) || [],
-        currentStoreId: storeId
-      })
-      
-      // If no stores available, clear everything
-      if (!stores || stores.length === 0) {
-        console.log('🔄 No stores available, clearing saved store')
-        setStoreId(null)
-        localStorage.removeItem('selected-store-id')
-        return
-      }
-      
-      // If we have a saved storeId, verify it exists in stores list
-      if (saved && stores.find(s => s.id === saved)) {
-        console.log('✅ Using saved store:', saved)
-        setStoreId(saved)
-        return
-      }
-      
-      // If saved store doesn't exist or no saved store, use first store
-      if (!saved || !stores.find(s => s.id === saved)) {
-        if (stores.length > 0) {
-          const firstStore = stores[0]
-          console.log('🔄 No valid saved store, using first store:', firstStore.id, firstStore.shop_domain)
-          setStoreId(firstStore.id)
-          localStorage.setItem('selected-store-id', firstStore.id)
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to access localStorage:', error)
-      // Fallback: select first store if available
-      if (stores && stores.length > 0) {
-        setStoreId(stores[0].id)
-      } else {
-        setStoreId(null)
-      }
+    // No stores available - clear everything
+    if (stores.length === 0) {
+      setStoreId(null);
+      localStorage.removeItem('selected-store-id');
+      return;
     }
-  }, [stores]) // Only run when stores change
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    
+    // Try to load saved store
+    const savedStoreId = localStorage.getItem('selected-store-id');
+    const savedStoreExists = savedStoreId && stores.find(s => s.id === savedStoreId);
+    
+    if (savedStoreExists) {
+      setStoreId(savedStoreId);
+    } else {
+      // Use first store as default
+      const firstStoreId = stores[0].id;
+      setStoreId(firstStoreId);
+      localStorage.setItem('selected-store-id', firstStoreId);
+    }
+  }, [stores]);
 
   const currentStore = stores && stores.length > 0 
     ? (stores.find(s => s.id === storeId) || stores[0]) 

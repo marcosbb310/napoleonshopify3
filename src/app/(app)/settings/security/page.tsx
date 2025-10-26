@@ -37,7 +37,7 @@ export default function SecurityPage() {
       
       const { data } = await supabase.auth.mfa.listFactors()
       return {
-        enabled: data?.totp?.length > 0,
+        enabled: data?.totp?.length ? data.totp.length > 0 : false,
         factors: data?.totp || []
       }
     },

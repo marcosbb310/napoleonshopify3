@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/shared/lib/supabase';
 import { ShopifyClient } from './shopifyClient';
-import { decryptTokens } from './tokenService';
+import { getDecryptedTokens } from '../../shopify-oauth/services/tokenService';
 import type { StoreAnalytics, DateRange } from '../hooks/useStoreData';
 
 export interface ShopifyOrder {

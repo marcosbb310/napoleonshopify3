@@ -72,6 +72,8 @@ export async function POST(request: NextRequest) {
               auto_pricing_enabled: true,
               current_state: 'increasing',
               revert_wait_until_date: null,
+              is_first_increase: true, // NEW: Treat global resume as first increase
+              next_price_change_date: new Date().toISOString(), // NEW: Immediate run
             })
             .eq('product_id', product.id),
           

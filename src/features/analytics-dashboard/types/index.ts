@@ -8,6 +8,11 @@ export interface DashboardMetrics {
   priceChangesToday: number;
   revenueChange: number;
   profitChange: number;
+  addedRevenueChange: number;
+  addedProfitChange: number;
+  baselineRevenue: number;
+  baselineProfit: number;
+  optimizedProducts: number;
 }
 
 export interface PriceHistoryData {

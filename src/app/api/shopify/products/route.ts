@@ -61,26 +61,26 @@ export async function GET(request: NextRequest) {
     
     // Transform Shopify API response to match our expected format
     const transformedProducts = data.products?.map((product: Record<string, unknown>) => ({
-      id: product.id.toString(),
-      title: product.title,
-      handle: product.handle,
-      description: product.body_html || '',
-      vendor: product.vendor || '',
-      productType: product.product_type || '',
-      tags: product.tags ? product.tags.split(',').map((tag: string) => tag.trim()) : [],
-      status: product.status as 'active' | 'draft' | 'archived',
-      images: product.images?.map((image: Record<string, unknown>) => ({
-        id: image.id.toString(),
-        productId: product.id.toString(),
-        src: image.src,
-        alt: image.alt || '',
-        width: image.width || 800,
-        height: image.height || 800,
+      id: (product.id as string) || '',
+      title: (product.title as string) || '',
+      handle: (product.handle as string) || '',
+      description: (product.body_html as string) || '',
+      vendor: (product.vendor as string) || '',
+      productType: (product.product_type as string) || '',
+      tags: (product.tags as string) ? (product.tags as string).split(',').map((tag: string) => tag.trim()) : [],
+      status: (product.status as 'active' | 'draft' | 'archived') || 'active',
+      images: (product.images as Record<string, unknown>[])?.map((image: Record<string, unknown>) => ({
+        id: (image.id as string) || '',
+        productId: (product.id as string) || '',
+        src: (image.src as string) || '',
+        alt: (image.alt as string) || '',
+        width: (image.width as number) || 800,
+        height: (image.height as number) || 800,
       })) || [],
-      variants: product.variants?.map((variant: Record<string, unknown>) => {
+      variants: (product.variants as Record<string, unknown>[])?.map((variant: Record<string, unknown>) => {
         // Validate and sanitize price values
-        const price = parseFloat(variant.price) || 0;
-        const compareAtPrice = variant.compare_at_price ? parseFloat(variant.compare_at_price) : null;
+        const price = parseFloat((variant.price as string) || '0') || 0;
+        const compareAtPrice = variant.compare_at_price ? parseFloat((variant.compare_at_price as string) || '0') : null;
         
         // Cap prices at reasonable maximum to prevent frontend issues
         const maxPrice = 999999.99;
@@ -88,30 +88,30 @@ export async function GET(request: NextRequest) {
         const sanitizedCompareAtPrice = compareAtPrice ? Math.min(compareAtPrice, maxPrice) : null;
         
         return {
-          id: variant.id.toString(),
-          productId: product.id.toString(),
-          title: variant.title,
-          sku: variant.sku || '',
+          id: (variant.id as string) || '',
+          productId: (product.id as string) || '',
+          title: (variant.title as string) || '',
+          sku: (variant.sku as string) || '',
           price: sanitizedPrice.toString(),
           compareAtPrice: sanitizedCompareAtPrice?.toString() || null,
-          inventoryQuantity: variant.inventory_quantity || 0,
-          inventoryManagement: variant.inventory_management,
-          weight: variant.weight,
-          weightUnit: variant.weight_unit as 'g' | 'kg' | 'oz' | 'lb',
+          inventoryQuantity: (variant.inventory_quantity as number) || 0,
+          inventoryManagement: (variant.inventory_management as string) || '',
+          weight: (variant.weight as number) || 0,
+          weightUnit: (variant.weight_unit as 'g' | 'kg' | 'oz' | 'lb') || 'g',
           image: variant.image ? {
-            id: variant.image.id.toString(),
-            productId: product.id.toString(),
-            src: variant.image.src,
-            alt: variant.image.alt || '',
-            width: variant.image.width || 800,
-            height: variant.image.height || 800,
+            id: ((variant.image as Record<string, unknown>).id as string) || '',
+            productId: (product.id as string) || '',
+            src: ((variant.image as Record<string, unknown>).src as string) || '',
+            alt: ((variant.image as Record<string, unknown>).alt as string) || '',
+            width: ((variant.image as Record<string, unknown>).width as number) || 800,
+            height: ((variant.image as Record<string, unknown>).height as number) || 800,
           } : undefined,
-          createdAt: variant.created_at,
-          updatedAt: variant.updated_at,
+          createdAt: (variant.created_at as string) || '',
+          updatedAt: (variant.updated_at as string) || '',
         };
       }) || [],
-      createdAt: product.created_at,
-      updatedAt: product.updated_at,
+      createdAt: (product.created_at as string) || '',
+      updatedAt: (product.updated_at as string) || '',
     })) || [];
 
     return NextResponse.json({ success: true, data: transformedProducts }, { status: 200 });

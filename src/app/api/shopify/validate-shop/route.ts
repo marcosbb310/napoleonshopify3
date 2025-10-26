@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
           isValid: false,
           shopDomain: '',
           error: 'Domain is required',
-          errorCode: 'MISSING_DOMAIN',
+          errorCode: 'MISSING_DOMAIN' as any,
         },
         { status: 400 }
       );
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         isValid: false,
         shopDomain: '',
         error: 'Validation failed',
-        errorCode: 'VALIDATION_ERROR',
+        errorCode: 'VALIDATION_ERROR' as any,
         suggestion: 'Please check the domain and try again',
       },
       { status: 500 }

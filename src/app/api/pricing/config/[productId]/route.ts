@@ -112,6 +112,8 @@ export async function PATCH(
 // Handle smart pricing toggle logic
 async function handleSmartPricingToggle(productId: string, enabled: boolean) {
   try {
+    const supabaseAdmin = createAdminClient();
+    
     // Try to find product by UUID first, then by Shopify ID
     let product: Record<string, unknown> | null = null;
     let productError: unknown = null;
@@ -147,18 +149,54 @@ async function handleSmartPricingToggle(productId: string, enabled: boolean) {
       );
     }
 
-    const config = Array.isArray(product.pricing_config) 
+    let config = Array.isArray(product.pricing_config) 
       ? product.pricing_config[0] 
       : product.pricing_config;
 
     if (enabled) {
       // TURNING ON smart pricing
+      
+      // Create pricing_config if it doesn't exist
+      if (!config) {
+        const { error: createError } = await supabaseAdmin
+          .from('pricing_config')
+          .insert({
+            product_id: product.id,
+            auto_pricing_enabled: false, // Will be set to true after modal confirmation
+            increment_percentage: 5.0,
+            period_hours: 24,
+            revenue_drop_threshold: 1.0,
+            wait_hours_after_revert: 24,
+            max_increase_percentage: 100.0,
+            current_state: 'increasing',
+            is_first_increase: true, // NEW: Flag for immediate first increase
+            next_price_change_date: new Date().toISOString(), // NEW: Immediate first run
+            pre_smart_pricing_price: product.current_price,
+          });
+        
+        if (createError) {
+          return NextResponse.json(
+            { success: false, error: `Failed to create config: ${createError.message}` },
+            { status: 500 }
+          );
+        }
+        
+        // Fetch the newly created config
+        const { data: newConfig } = await supabaseAdmin
+          .from('pricing_config')
+          .select('*')
+          .eq('product_id', product.id)
+          .single();
+        
+        config = newConfig;
+      }
+      
       // If first time, set pre_smart_pricing_price
       if (!config.pre_smart_pricing_price) {
         await supabaseAdmin
           .from('pricing_config')
           .update({ pre_smart_pricing_price: product.current_price })
-          .eq('product_id', productId);
+          .eq('product_id', product.id);
       }
 
       return NextResponse.json({
@@ -195,7 +233,7 @@ async function handleSmartPricingToggle(productId: string, enabled: boolean) {
         .eq('id', productId);
 
       // Update Shopify
-      await updateShopifyPrice(product.shopify_id, priceToRevert);
+      await updateShopifyPrice(product.shopify_id as string, priceToRevert);
 
       return NextResponse.json({
         success: true,
@@ -267,6 +305,7 @@ export async function POST(
   { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
+    const supabaseAdmin = createAdminClient();
     const { productId } = await params;
     const body = await request.json();
     const { newMaxPercentage } = body;
