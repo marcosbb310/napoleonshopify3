@@ -1,0 +1,913 @@
+// Products page - main hub for product management
+'use client';
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { 
+  type ProductFilter, 
+  type ProductWithPricing,
+  ProductCard,
+  ProductList,
+  BulkEditToolbar,
+  ProductFilters,
+  SelectionBar,
+  ProductCardSkeleton,
+  ProductListSkeleton,
+} from '@/features/product-management';
+import { useProducts, useStores } from '@/features/shopify-integration';
+import { 
+  useSmartPricing, 
+  useUndoState, 
+  SmartPricingResumeModal, 
+  SmartPricingConfirmDialog,
+  UndoButton,
+  PowerButton 
+} from '@/features/pricing-engine';
+import type { ViewMode } from '@/shared/types';
+import { Card } from '@/shared/components/ui/card';
+import { Button } from '@/shared/components/ui/button';
+import { Badge } from '@/shared/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
+import { X, Check, Undo2, Zap, ZapOff } from 'lucide-react';
+import { toast } from 'sonner';
+import Link from 'next/link';
+
+export default function ProductsPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [filter, setFilter] = useState<ProductFilter>({
+    sortBy: 'title',
+    sortDirection: 'asc',
+  });
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const [showingVariantsForProduct, setShowingVariantsForProduct] = useState<string | null>(null);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [selectedStoreId, setSelectedStoreId] = useState<string | undefined>();
+
+  // Get stores and select the first one if none selected
+  const { stores, isLoading: storesLoading } = useStores();
+  
+  useEffect(() => {
+    if (stores.length > 0 && !selectedStoreId) {
+      setSelectedStoreId(stores[0].id);
+    }
+  }, [stores, selectedStoreId]);
+  const { 
+    globalEnabled, 
+    handleGlobalToggle,
+    confirmGlobalDisable,
+    confirmGlobalEnable,
+    confirmGlobalResume,
+    isLoadingGlobal,
+    showGlobalConfirm,
+    setShowGlobalConfirm,
+    showGlobalResumeModal,
+    setShowGlobalResumeModal,
+    pendingGlobalAction,
+    globalPriceOptions,
+    globalSnapshots,
+    setGlobalSnapshots,
+    isProductEnabled, 
+    setProductState, 
+    setMultipleProductStates 
+  } = useSmartPricing();
+
+  // Undo state management
+  const { canUndo, formatTimeRemaining, setUndo, executeUndo, undoState } = useUndoState();
+  
+  // Product updates state - must be declared before useEffect that uses it
+  const [productUpdates, setProductUpdates] = useState<Map<string, Partial<ProductWithPricing['pricing']>>>(new Map());
+
+  // Get all products from the selected store
+  const { products: shopifyProducts, isLoading: productsLoading, error: productsError, syncProducts } = useProducts(selectedStoreId, {
+    search: searchQuery,
+    sortBy: filter.sortBy as any,
+    sortOrder: filter.sortDirection as any,
+  });
+
+  // Transform Shopify products to ProductWithPricing format
+  const allProducts: ProductWithPricing[] = useMemo(() => {
+    return shopifyProducts.map(product => {
+      const firstVariant = product.variants[0];
+      const currentPrice = firstVariant ? parseFloat(firstVariant.price) : 0;
+      const basePrice = currentPrice;
+      const cost = basePrice * 0.6; // Assume 60% cost
+      const maxPrice = basePrice * 1.5; // Assume 150% max price
+      const profitMargin = basePrice > 0 ? ((basePrice - cost) / basePrice) * 100 : 0;
+
+      return {
+        ...product,
+        pricing: {
+          basePrice,
+          cost,
+          maxPrice,
+          currentPrice,
+          profitMargin,
+          lastUpdated: new Date(),
+        },
+      };
+    });
+  }, [shopifyProducts]);
+
+  const loading = productsLoading || storesLoading;
+  const error = productsError;
+  const refetch = () => {
+    if (selectedStoreId) {
+      syncProducts.mutate(selectedStoreId);
+    }
+  };
+
+  // Memoized callback for global toggle to prevent infinite loops
+  // NOTE: handleGlobalToggle now reads globalEnabled internally, no need to pass it
+  const onGlobalToggle = useCallback(() => {
+    handleGlobalToggle();
+  }, [handleGlobalToggle]);
+
+  // Set undo state when global snapshots change - no reload needed!
+  useEffect(() => {
+    if (globalSnapshots && globalSnapshots.length > 0) {
+      console.log('🔄 Global snapshots received:', globalSnapshots.length);
+      
+      const action = globalEnabled ? 'global-on' : 'global-off';
+      const description = globalEnabled 
+        ? `enabled for ${globalSnapshots.length} products`
+        : `disabled for ${globalSnapshots.length} products`;
+      
+      console.log('💾 Saving undo state:', action, description);
+      
+      // Save undo state (persists to localStorage)
+      setUndo(action, globalSnapshots, description);
+      
+      // Update product prices in productUpdates (source of truth) - no page reload!
+      // This ensures prices persist through filters/searches
+      setProductUpdates(prev => {
+        const newMap = new Map(prev);
+        globalSnapshots.forEach(snapshot => {
+          if (snapshot.newPrice !== undefined) {
+            console.log(`Updating product ${snapshot.shopifyId} to $${snapshot.newPrice}`);
+            const existingUpdates = newMap.get(snapshot.shopifyId) || {};
+            newMap.set(snapshot.shopifyId, { 
+              ...existingUpdates, 
+              currentPrice: snapshot.newPrice 
+            });
+          }
+        });
+        return newMap;
+      });
+      
+      // Clear snapshots after processing
+      setGlobalSnapshots(null);
+    }
+  }, [globalSnapshots, globalEnabled, setUndo, setProductUpdates, setGlobalSnapshots]);
+  const [lastBulkAction, setLastBulkAction] = useState<{
+    updates: Map<string, Partial<ProductWithPricing['pricing']>>;
+    description: string;
+  } | null>(null);
+
+  // Apply any pending updates to products - memoized to prevent recreation
+  const applyUpdatesToProducts = useCallback((productList: ProductWithPricing[]) => {
+    if (productUpdates.size === 0) return productList;
+    
+    return productList.map(product => {
+      const updates = productUpdates.get(product.id);
+      if (!updates) return product;
+      
+      const updatedPricing = { ...product.pricing, ...updates };
+      
+      // Recalculate profit margin
+      const cost = updatedPricing.cost;
+      const basePrice = updatedPricing.basePrice;
+      updatedPricing.profitMargin = ((basePrice - cost) / basePrice) * 100;
+      
+      return {
+        ...product,
+        pricing: updatedPricing,
+      };
+    });
+  }, [productUpdates]);
+
+  // Check for bulkEdit URL parameter and open dialog if present
+  useEffect(() => {
+    const bulkEdit = searchParams.get('bulkEdit');
+    if (bulkEdit === 'true') {
+      setBulkEditOpen(true);
+    }
+  }, [searchParams]);
+
+  // Filter and sort products - compute on every render like products-test2 to avoid useEffect loops
+  const products = useMemo(() => {
+    let filtered = applyUpdatesToProducts([...allProducts]);
+
+    // Apply advanced filters first
+    if (filter.priceMin !== undefined || filter.priceMax !== undefined) {
+      filtered = filtered.filter(product => {
+        const price = product.pricing.currentPrice;
+        const min = filter.priceMin ?? 0;
+        const max = filter.priceMax ?? Infinity;
+        return price >= min && price <= max;
+      });
+    }
+
+    if (filter.marginMin !== undefined || filter.marginMax !== undefined) {
+      filtered = filtered.filter(product => {
+        const margin = product.pricing.profitMargin;
+        const min = filter.marginMin ?? 0;
+        const max = filter.marginMax ?? 100;
+        return margin >= min && margin <= max;
+      });
+    }
+
+    if (filter.vendors && filter.vendors.length > 0) {
+      filtered = filtered.filter(product => 
+        filter.vendors!.includes(product.vendor)
+      );
+    }
+
+    if (filter.productTypes && filter.productTypes.length > 0) {
+      filtered = filtered.filter(product => 
+        filter.productTypes!.includes(product.productType)
+      );
+    }
+
+    // Apply tag filter
+    if (selectedTags.size > 0) {
+      filtered = filtered.filter(product => 
+        product.tags.some(tag => selectedTags.has(tag))
+      );
+    }
+
+    // Apply search filter with ranking
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      
+      // Create array with relevance scores
+      const scoredProducts = allProducts
+        .map(product => {
+          const title = product.title.toLowerCase();
+          const vendor = product.vendor.toLowerCase();
+          const productType = product.productType.toLowerCase();
+          const tags = product.tags.map((t: string) => t.toLowerCase());
+          
+          let score = 0;
+          
+          // Title scoring (use if/else to get only the highest match)
+          if (title === query) {
+            score += 1000;
+          } else if (title.startsWith(query)) {
+            score += 500;
+          } else if (title.includes(` ${query} `) || title.includes(` ${query}`) || title.includes(`${query} `)) {
+            score += 300;
+          } else if (title.includes(query)) {
+            score += 200;
+          }
+          
+          // Tag scoring (independent of title)
+          if (tags.some((tag: string) => tag === query)) {
+            score += 150;
+          } else if (tags.some((tag: string) => tag.startsWith(query))) {
+            score += 100;
+          } else if (tags.some((tag: string) => tag.includes(query))) {
+            score += 75;
+          }
+          
+          // Product type scoring (independent)
+          if (productType === query) {
+            score += 120;
+          } else if (productType.startsWith(query)) {
+            score += 80;
+          } else if (productType.includes(query)) {
+            score += 50;
+          }
+          
+          // Vendor scoring (independent)
+          if (vendor === query) {
+            score += 100;
+          } else if (vendor.startsWith(query)) {
+            score += 70;
+          } else if (vendor.includes(query)) {
+            score += 40;
+          }
+          
+          return { product, score };
+        })
+        .filter(item => item.score > 0) // Only keep products with matches
+        .sort((a, b) => b.score - a.score) // Sort by relevance score
+        .map(item => item.product); // Extract products
+      
+      filtered = scoredProducts;
+    }
+
+    // Apply additional sorting only if no search query
+    if (!searchQuery.trim()) {
+      filtered.sort((a, b) => {
+        let comparison = 0;
+        
+        switch (filter.sortBy) {
+          case 'title':
+            comparison = a.title.localeCompare(b.title);
+            break;
+          case 'price':
+            comparison = a.pricing.currentPrice - b.pricing.currentPrice;
+            break;
+          case 'updated':
+            comparison = new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+            break;
+          case 'sales':
+            // For now, sort by inventory (higher = more popular)
+            comparison = (b.variants[0]?.inventoryQuantity || 0) - (a.variants[0]?.inventoryQuantity || 0);
+            break;
+        }
+
+        return filter.sortDirection === 'asc' ? comparison : -comparison;
+      });
+    }
+
+    return filtered;
+  }, [allProducts, searchQuery, selectedTags, filter, applyUpdatesToProducts]);
+
+  const handleUpdatePricing = (productId: string, pricing: { basePrice?: number; cost?: number; maxPrice?: number; currentPrice?: number }) => {
+    console.log('Updating pricing for product:', productId, pricing);
+    
+    // Update the updates map
+    setProductUpdates(prev => {
+      const newMap = new Map(prev);
+      const existingUpdates = newMap.get(productId) || {};
+      newMap.set(productId, { ...existingUpdates, ...pricing });
+      return newMap;
+    });
+
+    // TODO: Call Shopify API to update product pricing
+    // await shopifyClient.updateProductPrice(productId, pricing);
+  };
+
+  const handleBulkUpdate = (updates: {
+    type: 'percentage' | 'fixed';
+    value: number;
+    applyTo: 'basePrice' | 'maxPrice' | 'cost' | 'currentPrice';
+    productIds: string[];
+  }) => {
+    console.log('handleBulkUpdate called in page:', updates);
+
+    // Store previous state for undo
+    const previousUpdates = new Map(productUpdates);
+
+    // Find the current products and calculate new values
+    setProductUpdates(prev => {
+      const newMap = new Map(prev);
+      
+      // Get the current products to calculate from their current values
+      const currentProducts = applyUpdatesToProducts([...allProducts]);
+      
+      // If no productIds specified, apply to ALL products
+      const targetProductIds = updates.productIds.length === 0 
+        ? currentProducts.map(p => p.id)
+        : updates.productIds;
+      
+      console.log(`Applying to ${targetProductIds.length} products (${updates.productIds.length === 0 ? 'ALL' : 'SELECTED'})`);
+      
+      targetProductIds.forEach(productId => {
+        const product = currentProducts.find(p => p.id === productId);
+        if (!product) return;
+        
+        const existingUpdates = newMap.get(productId) || {};
+        const currentPricing = { ...product.pricing, ...existingUpdates };
+        const currentValue = currentPricing[updates.applyTo];
+
+        // Calculate new value based on type
+        let newValue: number;
+        if (updates.type === 'percentage') {
+          newValue = currentValue * (1 + updates.value / 100);
+        } else {
+          newValue = currentValue + updates.value;
+        }
+
+        // Ensure value is positive
+        newValue = Math.max(0.01, newValue);
+        
+        console.log(`Updating ${productId} ${updates.applyTo} from ${currentValue.toFixed(2)} to ${newValue.toFixed(2)}`);
+        
+        newMap.set(productId, {
+          ...existingUpdates,
+          [updates.applyTo]: newValue,
+        });
+      });
+      
+      return newMap;
+    });
+
+    // Create description for undo
+    const field = updates.applyTo === 'basePrice' ? 'Base Price' : updates.applyTo === 'maxPrice' ? 'Max Price' : 'Cost';
+    const change = updates.type === 'percentage' 
+      ? `${updates.value > 0 ? '+' : ''}${updates.value}%`
+      : `${updates.value > 0 ? '+' : ''}$${updates.value}`;
+    const targetCount = updates.productIds.length === 0 ? allProducts.length : updates.productIds.length;
+    const description = `${field} ${change} on ${targetCount} product${targetCount > 1 ? 's' : ''}`;
+
+    // Store for undo
+    setLastBulkAction({
+      updates: previousUpdates,
+      description,
+    });
+
+    // Show success toast
+    toast.success('Bulk update applied!', {
+      description: description,
+    });
+
+    // TODO: Call Shopify API to bulk update product pricing
+    // await shopifyClient.bulkUpdateProductPrices(updates);
+  };
+
+  const handleUndo = () => {
+    if (!lastBulkAction) return;
+
+    setProductUpdates(lastBulkAction.updates);
+    toast.success('Changes undone', {
+      description: `Reverted: ${lastBulkAction.description}`,
+    });
+    setLastBulkAction(null);
+  };
+
+
+  const handleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === products.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(products.map(p => p.id)));
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleToggleSmartPricing = (enable: boolean) => {
+    // Update state for all selected products
+    setMultipleProductStates(Array.from(selectedIds), enable);
+
+    // TODO: Call API to enable/disable smart pricing for selected products
+    console.log(`${enable ? 'Enabling' : 'Disabling'} smart pricing for products:`, Array.from(selectedIds));
+    
+    toast.success(`Smart pricing ${enable ? 'enabled' : 'disabled'} for ${selectedIds.size} product${selectedIds.size > 1 ? 's' : ''}`, {
+      description: enable 
+        ? 'Algorithm will start optimizing prices for selected products'
+        : 'Prices will remain at current values until re-enabled',
+    });
+  };
+
+  const handleProductSmartPricingToggle = (productId: string, enabled: boolean, newPrice?: number) => {
+    setProductState(productId, enabled);
+
+    // Update product price in allProducts (source of truth) if provided
+    // This ensures the price persists through filters/searches
+    if (newPrice !== undefined) {
+      // Store in productUpdates so it persists
+      setProductUpdates(prev => {
+        const newMap = new Map(prev);
+        const existingUpdates = newMap.get(productId) || {};
+        newMap.set(productId, { ...existingUpdates, currentPrice: newPrice });
+        return newMap;
+      });
+    }
+  };
+
+  const handleTagClick = (tag: string) => {
+    setSelectedTags(prevTags => {
+      const newTags = new Set(prevTags);
+      if (newTags.has(tag)) {
+        newTags.delete(tag);
+      } else {
+        newTags.add(tag);
+      }
+      return newTags;
+    });
+  };
+
+  const handleShowVariants = (productId: string) => {
+    setShowingVariantsForProduct(productId);
+  };
+
+  const handleCloseVariants = () => {
+    setShowingVariantsForProduct(null);
+  };
+
+  const selectedProduct = products.find(p => p.id === showingVariantsForProduct);
+  
+  const priceRange = selectedProduct && selectedProduct.variants.length > 1 
+    ? `$${Math.min(...selectedProduct.variants.map(v => parseFloat(v.price))).toFixed(2)} - $${Math.max(...selectedProduct.variants.map(v => parseFloat(v.price))).toFixed(2)}`
+    : selectedProduct ? `$${selectedProduct.variants[0]?.price || '0.00'}` : '';
+    
+  const totalInventory = selectedProduct ? selectedProduct.variants.reduce((sum, v) => sum + (v.inventoryQuantity || 0), 0) : 0;
+
+  // Show store selection if no store is selected
+  if (stores.length === 0 && !storesLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+            <p className="text-muted-foreground">Manage your products and pricing</p>
+          </div>
+        </div>
+        <Card className="flex h-64 items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg font-medium">No stores connected</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Connect your Shopify store to start managing products
+            </p>
+            <Link href="/settings?tab=integrations">
+              <Button>Connect Store</Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 relative">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-4 mb-2">
+            <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+            
+            {/* Store Selector */}
+            {stores.length > 1 && (
+              <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Select store" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores.map((store) => (
+                    <SelectItem key={store.id} value={store.id}>
+                      {store.shop_domain}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            
+            {/* Test Layout Links */}
+            <div className="flex items-center gap-2">
+              <Link href="/products-test">
+                <Badge variant="outline" className="text-xs cursor-pointer hover:bg-accent">
+                  🧪 Accordion
+                </Badge>
+              </Link>
+              <Link href="/products-test2">
+                <Badge variant="outline" className="text-xs cursor-pointer hover:bg-accent">
+                  🧪 Slide-out
+                </Badge>
+              </Link>
+            </div>
+            {/* Global Smart Pricing Toggle */}
+            <PowerButton 
+              enabled={globalEnabled}
+              onToggle={onGlobalToggle}
+              disabled={isLoadingGlobal}
+              label="Global Smart Pricing"
+            />
+            {/* Undo Button */}
+            {canUndo && (
+              <UndoButton
+                onClick={async () => {
+                  const result = await executeUndo();
+                  if (result.success) {
+                    toast.success(`Undone: ${undoState?.description}`);
+                    // Prices will be refreshed automatically via React Query cache invalidation
+                    refetch(); // Force refetch to ensure prices are up-to-date
+                  } else {
+                    toast.error('Failed to undo');
+                  }
+                }}
+                description={undoState?.description || ''}
+                timeRemaining={formatTimeRemaining()}
+              />
+            )}
+          </div>
+          <p className="text-muted-foreground">
+            {selectedIds.size === 0 
+              ? 'Manage your products and pricing'
+              : `${selectedIds.size} product${selectedIds.size > 1 ? 's' : ''} selected`
+            }
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 items-end">
+          <div className="flex gap-2">
+            {lastBulkAction && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={handleUndo}
+              >
+                <Undo2 className="h-4 w-4" />
+                Undo Last Change
+              </Button>
+            )}
+            <BulkEditToolbar 
+              selectedCount={selectedIds.size} 
+              selectedIds={Array.from(selectedIds)}
+              totalProductCount={allProducts.length}
+              open={bulkEditOpen}
+              onOpenChange={setBulkEditOpen}
+              onBulkUpdate={handleBulkUpdate}
+            />
+          </div>
+        </div>
+      </div>
+
+      <ProductFilters
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        filter={filter}
+        onFilterChange={setFilter}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        allProducts={allProducts}
+      />
+
+      {/* Select All Button for filtered products */}
+      {!loading && products.length > 0 && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSelectAll}
+              className="gap-2"
+            >
+              {selectedIds.size === products.length ? (
+                <>
+                  <X className="h-4 w-4" />
+                  Deselect All ({products.length})
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" />
+                  Select All ({products.length})
+                </>
+              )}
+            </Button>
+            {selectedIds.size > 0 && (
+              <span className="text-sm text-muted-foreground">
+                {selectedIds.size} of {products.length} products selected
+              </span>
+            )}
+          </div>
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2">
+              {(() => {
+                // Check if any selected products have smart pricing enabled
+                const selectedProducts = Array.from(selectedIds);
+                const allEnabled = selectedProducts.every(id => isProductEnabled(id));
+                
+                return (
+                  <Button
+                    variant={allEnabled ? "outline" : "default"}
+                    size="sm"
+                    onClick={() => handleToggleSmartPricing(!allEnabled)}
+                    className="gap-2"
+                  >
+                    {allEnabled ? (
+                      <>
+                        <ZapOff className="h-4 w-4" />
+                        Turn Off Smart Pricing
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-4 w-4" />
+                        Turn On Smart Pricing
+                      </>
+                    )}
+                  </Button>
+                );
+              })()}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSelection}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Clear Selection
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="space-y-4">
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <ProductCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <ProductListSkeleton key={i} />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : error ? (
+        <Card className="flex h-64 items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg font-medium text-destructive">Failed to load products</p>
+            <p className="text-sm text-muted-foreground mb-4">{error instanceof Error ? error.message : String(error)}</p>
+            {(error instanceof Error ? error.message : String(error)).includes('403') || (error instanceof Error ? error.message : String(error)).includes('Forbidden') ? (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Your Shopify access token may be invalid or expired.
+                </p>
+                <Link href="/settings">
+                  <Button 
+                    variant="default" 
+                    size="sm" 
+                    className="mt-4"
+                  >
+                    Reconnect Store
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Please check your store connection and try refreshing the page.
+                </p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-4"
+                  onClick={() => window.location.reload()}
+                >
+                  Refresh Page
+                </Button>
+              </div>
+            )}
+          </div>
+        </Card>
+      ) : products.length === 0 ? (
+        <Card className="flex h-64 items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg font-medium">No products found</p>
+            <p className="text-sm text-muted-foreground">
+              Try adjusting your filters or search terms
+            </p>
+          </div>
+        </Card>
+      ) : viewMode === 'grid' ? (
+        <div className="relative">
+          {/* Backdrop overlay */}
+          {showingVariantsForProduct && (
+            <div 
+              className="fixed inset-0 bg-black/60 z-40 animate-in fade-in duration-300"
+              onClick={handleCloseVariants}
+            />
+          )}
+          
+          {/* Products Grid */}
+          <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 auto-rows-fr transition-all duration-300 ${
+            showingVariantsForProduct ? 'opacity-40 pointer-events-none' : ''
+          }`}>
+            {products.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                isSelected={selectedIds.has(product.id)}
+                onSelect={handleSelect}
+                onEdit={() => console.log('Edit product:', product)}
+                onUpdatePricing={handleUpdatePricing}
+                selectedTags={selectedTags}
+                onTagClick={handleTagClick}
+                onShowVariants={handleShowVariants}
+                isShowingVariants={product.id === showingVariantsForProduct}
+                smartPricingEnabled={isProductEnabled(product.id)}
+                onSmartPricingToggle={(enabled, newPrice) => handleProductSmartPricingToggle(product.id, enabled, newPrice)}
+                globalSmartPricingEnabled={globalEnabled}
+              />
+            ))}
+          </div>
+
+          {/* Variant Panel - slides from the selected card */}
+          {showingVariantsForProduct && selectedProduct && (
+            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[90vw] max-w-4xl animate-in slide-in-from-right duration-300">
+              <div className="bg-background border-2 border-primary rounded-lg shadow-2xl p-6 max-h-[80vh] overflow-y-auto">
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1">{selectedProduct.title}</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedProduct.variants.length} variants • {priceRange} • {totalInventory} total stock
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCloseVariants}
+                    className="hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {selectedProduct.variants.map((variant) => (
+                    <div 
+                      key={variant.id} 
+                      className="border rounded-lg p-4 hover:border-primary/40 transition-colors bg-card"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-sm mb-1">{variant.title}</h4>
+                          <p className="text-xs text-muted-foreground">SKU: {variant.sku}</p>
+                        </div>
+                        <Badge 
+                          variant={
+                            (variant.inventoryQuantity || 0) < 10 ? 'destructive' : 
+                            (variant.inventoryQuantity || 0) < 20 ? 'secondary' : 
+                            'default'
+                          }
+                          className="text-xs"
+                        >
+                          {variant.inventoryQuantity || 0} in stock
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Price</p>
+                          <p className="font-bold text-primary">${variant.price}</p>
+                          {variant.compareAtPrice && parseFloat(variant.compareAtPrice) > parseFloat(variant.price) && (
+                            <p className="text-xs line-through text-muted-foreground">
+                              Was ${variant.compareAtPrice}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Weight</p>
+                          <p className="font-semibold">
+                            {variant.weight ? `${variant.weight}${variant.weightUnit || 'g'}` : 'Not set'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <ProductList
+          products={products}
+          selectedIds={selectedIds}
+          onSelect={handleSelect}
+          onSelectAll={handleSelectAll}
+          onEdit={(product) => console.log('Edit product:', product)}
+          onUpdatePricing={handleUpdatePricing}
+          isProductEnabled={isProductEnabled}
+          onSmartPricingToggle={handleProductSmartPricingToggle}
+        />
+      )}
+
+      <SelectionBar
+        selectedCount={selectedIds.size}
+        onClearSelection={handleClearSelection}
+      />
+
+      {/* Global Smart Pricing Confirmation Dialog */}
+      <SmartPricingConfirmDialog
+        open={showGlobalConfirm}
+        onOpenChange={setShowGlobalConfirm}
+        onConfirm={pendingGlobalAction === 'disable' ? confirmGlobalDisable : confirmGlobalEnable}
+        type={pendingGlobalAction === 'disable' ? 'global-disable' : 'global-enable'}
+        productCount={allProducts.length}
+      />
+
+      {/* Global Smart Pricing Resume Modal */}
+      <SmartPricingResumeModal
+        open={showGlobalResumeModal}
+        onOpenChange={setShowGlobalResumeModal}
+        onConfirm={confirmGlobalResume}
+        productCount={allProducts.length}
+        basePrice={globalPriceOptions?.base || 0}
+        lastSmartPrice={globalPriceOptions?.last || 0}
+      />
+    </div>
+  );
+}
+
