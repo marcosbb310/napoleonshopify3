@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "eb49208f806430d7c4e39b914be9a18a"
-name = "Napoleon3"
+client_id = "459553a50d3f892b83d3d5df5dc459d9"
+name = "Napoleon"
 application_url = "http://localhost:3000"
 embedded = true
 

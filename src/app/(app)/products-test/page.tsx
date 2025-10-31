@@ -530,6 +530,7 @@ export default function ProductsTestPage() {
                       src={selectedProduct.images[0].src}
                       alt={selectedProduct.title}
                       fill
+                      sizes="500px"
                       className="object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/75" />

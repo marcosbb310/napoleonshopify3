@@ -125,6 +125,7 @@ export function ProductCardCompact({
                 src={product.images[0]}
                 alt={product.title}
                 fill
+                sizes="280px"
                 className="object-cover transition-transform duration-200 group-hover:scale-105"
               />
             ) : (

@@ -12,6 +12,7 @@ export interface ProductPricing {
   currentPrice: number;
   profitMargin: number;
   lastUpdated: Date;
+  autoPricingEnabled?: boolean;
 }
 
 export interface BulkPriceUpdate {

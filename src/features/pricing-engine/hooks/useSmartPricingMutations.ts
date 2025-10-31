@@ -157,15 +157,19 @@ export function useUpdatePricingConfig() {
 
   return useMutation({
     mutationFn: async ({ productId, auto_pricing_enabled }: UpdatePricingConfigRequest): Promise<UpdatePricingConfigResponse> => {
+      console.log('[DEBUG] useUpdatePricingConfig productId:', productId);
       const response = await fetch(`/api/pricing/config/${productId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ auto_pricing_enabled }),
       });
 
+      console.log('[DEBUG] Response status:', response.status);
       const data = await response.json();
+      console.log('[DEBUG] Response data:', JSON.stringify(data));
 
       if (!data.success) {
+        console.error('[ERROR] API returned error:', data.error);
         throw new Error(data.error || 'Failed to update pricing config');
       }
 

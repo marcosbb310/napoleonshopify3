@@ -10,38 +10,14 @@ export async function GET(
     console.log('=== Performance API called ===');
     const resolvedParams = await context.params;
     const productId = resolvedParams.productId;
-    console.log('Product ID:', productId);
+    console.log('🔍 Product ID parameter:', productId);
+    console.log('🔍 Product ID type:', typeof productId);
+    console.log('🔍 Product ID length:', productId.length);
 
-    // Simple test first - just return mock data to verify route works
-    console.log('Testing route - returning mock data');
-    return NextResponse.json({
-      success: true,
-      data: {
-        product: {
-          id: 'test-id',
-          shopifyId: productId,
-          title: 'Test Product',
-          startingPrice: 50,
-          currentPrice: 55,
-          autoPricingEnabled: true,
-          lastPriceChange: new Date().toISOString(),
-        },
-        summary: {
-          totalRevenue: 1000,
-          totalUnits: 20,
-          avgPrice: 50,
-          baselineRevenue: 900,
-          revenueIncrease: 100,
-          revenueIncreasePercent: 11.1,
-          priceChanges: 3,
-        },
-        priceHistory: [],
-        salesData: [],
-      },
-    });
-
-    /* Temporarily commented out to test route
+    const supabaseAdmin = createAdminClient();
+    
     // Try to find product by shopify_id first (coming from frontend)
+    console.log('🔍 Searching for product by shopify_id:', productId);
     let productQuery = supabaseAdmin
       .from('products')
       .select(`
@@ -58,9 +34,12 @@ export async function GET(
       .eq('shopify_id', productId);
 
     let { data: product, error: productError } = await productQuery.single();
+    console.log('🔍 Query result - Found product:', !!product);
+    console.log('🔍 Query result - Error:', productError);
 
     // If not found by shopify_id, try UUID
     if (productError || !product) {
+      console.log('⚠️ Product not found by shopify_id, trying UUID lookup');
       const uuidQuery = await supabaseAdmin
         .from('products')
         .select(`
@@ -79,6 +58,8 @@ export async function GET(
       
       product = uuidQuery.data;
       productError = uuidQuery.error;
+      console.log('🔍 UUID Query result - Found product:', !!product);
+      console.log('🔍 UUID Query result - Error:', productError);
     }
 
     if (productError || !product) {
@@ -88,9 +69,7 @@ export async function GET(
         { status: 404 }
       );
     }
-    */
-
-    /* Temporarily commented out
+    
     // Fetch pricing history
     const { data: priceHistory, error: historyError } = await supabaseAdmin
       .from('pricing_history')
@@ -161,10 +140,33 @@ export async function GET(
         revenueChangePercent: change.revenue_change_percent ? Number(change.revenue_change_percent) : null,
       };
     }) || [];
-
-    // This code is now unreachable due to early return above
-    // Will re-enable after route is confirmed working
-    */
+    
+    // Return the actual performance data
+    return NextResponse.json({
+      success: true,
+      data: {
+        product: {
+          id: product.id,
+          shopifyId: product.shopify_id,
+          title: product.title,
+          startingPrice: Number(product.starting_price),
+          currentPrice: Number(product.current_price),
+          autoPricingEnabled: pricingConfig?.auto_pricing_enabled || false,
+          lastPriceChange: pricingConfig?.last_price_change_date,
+        },
+        summary: {
+          totalRevenue,
+          totalUnits,
+          avgPrice,
+          baselineRevenue,
+          revenueIncrease,
+          revenueIncreasePercent,
+          priceChanges: priceHistory?.length || 0,
+        },
+        priceHistory: pricePerformance,
+        salesData: salesData || [],
+      },
+    });
   } catch (error) {
     console.error('Performance API Error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';

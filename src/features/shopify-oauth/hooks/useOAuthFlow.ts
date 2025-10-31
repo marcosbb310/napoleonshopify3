@@ -31,8 +31,29 @@ export function useOAuthFlow() {
     },
     onSuccess: (data) => {
       if (data.oauthUrl) {
-        // Redirect to Shopify OAuth
-        window.location.href = data.oauthUrl;
+        // Open OAuth in popup window (not redirect)
+        const width = 600;
+        const height = 700;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        
+        const popup = window.open(
+          data.oauthUrl,
+          'shopify-oauth',
+          `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+        );
+        
+        if (!popup) {
+          toast.error('Please allow popups for this site');
+          return;
+        }
+        
+        // Monitor popup (will be closed by callback script)
+        const checkClosed = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkClosed);
+          }
+        }, 500);
       }
     },
     onError: (error) => {

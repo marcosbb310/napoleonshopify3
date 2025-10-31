@@ -86,6 +86,13 @@ export function ProductCard({
     setLocalEnabled(smartPricingEnabled);
   }, [smartPricingEnabled, product.title]);
   
+  // Log product ID when component mounts or changes
+  useEffect(() => {
+    console.log(`🎴 ProductCard "${product.title}" - product.id:`, product.id);
+    console.log(`🎴 ProductCard "${product.title}" - product.id type:`, typeof product.id);
+    console.log(`🎴 ProductCard "${product.title}" - product.id length:`, product.id?.length);
+  }, [product.id, product.title]);
+  
   // Use smart pricing toggle hook
   const {
     isLoading: isTogglingSmartPricing,
@@ -296,6 +303,7 @@ export function ProductCard({
             src={product.images[0].src}
             alt={product.title}
             fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
             className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
@@ -364,17 +372,21 @@ export function ProductCard({
             </button>
             
             {/* Analytics Button */}
-            {onViewAnalytics && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                console.log('🚀 View Analytics clicked for product ID:', product.id);
+                console.log('🚀 onViewAnalytics function exists?', !!onViewAnalytics);
+                if (onViewAnalytics) {
                   onViewAnalytics(product.id);
-                }}
-                className="w-full px-3 py-1.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold bg-black/60 hover:bg-black/70 text-white backdrop-blur-md shadow-lg"
-              >
-                <span className="text-xs">📊 View Analytics</span>
-              </button>
-            )}
+                } else {
+                  console.error('❌ onViewAnalytics is not defined');
+                }
+              }}
+              className="w-full px-3 py-1.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold bg-black/60 hover:bg-black/70 text-white backdrop-blur-md shadow-lg"
+            >
+              <span className="text-xs">📊 View Analytics</span>
+            </button>
           </div>
         </div>
       </div>

@@ -27,10 +27,16 @@ import type { ViewMode } from '@/shared/types';
 import { Card } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
+import { Input } from '@/shared/components/ui/input';
+import { Switch } from '@/shared/components/ui/switch';
+import { Label } from '@/shared/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
-import { X, Check, Undo2, Zap, ZapOff } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/shared/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
+import { X, Check, Undo2, Zap, ZapOff, Search, DollarSign, TrendingUp, BarChart3, Package, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function ProductsPage() {
   const searchParams = useSearchParams();
@@ -46,6 +52,20 @@ export default function ProductsPage() {
   const [showingVariantsForProduct, setShowingVariantsForProduct] = useState<string | null>(null);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [selectedStoreId, setSelectedStoreId] = useState<string | undefined>();
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  
+  // Pricing settings for selected product (for analytics panel)
+  const [basePrice, setBasePrice] = useState(0);
+  const [maxPrice, setMaxPrice] = useState(0);
+  const [cost, setCost] = useState(0);
+  
+  // Inline editing state for Quick Price Info cards
+  const [editingQuickField, setEditingQuickField] = useState<'basePrice' | 'currentPrice' | 'maxPrice' | null>(null);
+  const [quickEditValue, setQuickEditValue] = useState('');
+  
+  // Performance data state
+  const [performanceData, setPerformanceData] = useState<Record<string, unknown> | null>(null);
+  const [loadingPerformance, setLoadingPerformance] = useState(false);
 
   // Get stores and select the first one if none selected
   const { stores, isLoading: storesLoading } = useStores();
@@ -98,6 +118,12 @@ export default function ProductsPage() {
       const maxPrice = basePrice * 1.5; // Assume 150% max price
       const profitMargin = basePrice > 0 ? ((basePrice - cost) / basePrice) * 100 : 0;
 
+      // Get pricing config from product metadata
+      const pricingConfig = (product as any).pricing_config;
+      const autoPricingEnabled = Array.isArray(pricingConfig) 
+        ? pricingConfig[0]?.auto_pricing_enabled ?? true
+        : pricingConfig?.auto_pricing_enabled ?? true;
+
       return {
         ...product,
         pricing: {
@@ -107,6 +133,7 @@ export default function ProductsPage() {
           currentPrice,
           profitMargin,
           lastUpdated: new Date(),
+          autoPricingEnabled, // Store the smart pricing state
         },
       };
     });
@@ -504,7 +531,177 @@ export default function ProductsPage() {
     setShowingVariantsForProduct(null);
   };
 
+  const handleViewAnalytics = (productId: string) => {
+    console.log('🔍 handleViewAnalytics called with:', productId);
+    console.log('🔍 ProductId type:', typeof productId);
+    console.log('🔍 ProductId length:', productId?.length);
+    console.log('🔍 Total filtered products:', products.length);
+    console.log('🔍 Total all products:', allProducts.length);
+    
+    // Debug: show first few product IDs for comparison
+    if (products.length > 0) {
+      console.log('🔍 Sample filtered product IDs:', products.slice(0, 3).map(p => ({ id: p.id, type: typeof p.id, length: p.id?.length })));
+    }
+    if (allProducts.length > 0) {
+      console.log('🔍 Sample all product IDs:', allProducts.slice(0, 3).map(p => ({ id: p.id, type: typeof p.id, length: p.id?.length })));
+    }
+    
+    // First try to find in filtered products array
+    let product = products.find(p => p.id === productId);
+    console.log('🔍 Search result in filtered array:', !!product);
+    
+    // If not found, search in all products (might be filtered out)
+    if (!product) {
+      console.log('⚠️ Product not in filtered array, searching in all products...');
+      product = allProducts.find(p => p.id === productId);
+      console.log('🔍 Search result in all products:', !!product);
+    }
+    
+    if (product) {
+      console.log('✅ Opening analytics modal for:', product.title);
+      setSelectedProductId(productId);
+      setBasePrice(product.pricing.basePrice);
+      setMaxPrice(product.pricing.maxPrice);
+      setCost(product.pricing.cost);
+      // Reset editing state when opening modal
+      setEditingQuickField(null);
+      // Fetch performance data
+      fetchPerformanceData(productId);
+    } else {
+      console.error('❌ Product not found with ID:', productId);
+      console.error('❌ Requested ID type:', typeof productId, 'length:', productId?.length);
+      console.error('❌ First 5 IDs in filtered products:', products.slice(0, 5).map(p => ({ id: p.id, type: typeof p.id })));
+      console.error('❌ First 5 IDs in all products:', allProducts.slice(0, 5).map(p => ({ id: p.id, type: typeof p.id })));
+      toast.error('Product not found. It may have been removed or filtered.');
+    }
+  };
+
+  // Fetch performance data for selected product
+  const fetchPerformanceData = async (productId: string) => {
+    console.log('Fetching performance for product:', productId);
+    setLoadingPerformance(true);
+    try {
+      const response = await fetch(`/api/products/${productId}/performance`);
+      console.log('Performance API response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+        
+        if (response.status === 404) {
+          console.error('Product not found in database:', productId);
+          toast.error('Product data not found in database. Try syncing your products first.');
+        } else {
+          console.error('API error:', errorMessage);
+          toast.error(`Failed to fetch performance data: ${errorMessage}`);
+        }
+        setPerformanceData(null);
+        return;
+      }
+      
+      const result = await response.json();
+      console.log('Performance API result:', result);
+      
+      if (result.success && result.data) {
+        setPerformanceData(result.data);
+      } else {
+        console.error('Failed to fetch performance data:', result.error);
+        toast.error(result.error || 'Failed to fetch performance data');
+        setPerformanceData(null);
+      }
+    } catch (error) {
+      console.error('Error fetching performance data:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Error loading performance data: ${errorMessage}`);
+      setPerformanceData(null);
+    } finally {
+      setLoadingPerformance(false);
+    }
+  };
+
+  // Save pricing settings from analytics panel
+  const handleSaveSettings = () => {
+    if (!selectedProductId) return;
+    
+    setProductUpdates(prev => {
+      const newMap = new Map(prev);
+      const existingUpdates = newMap.get(selectedProductId) || {};
+      newMap.set(selectedProductId, { 
+        ...existingUpdates, 
+        basePrice,
+        maxPrice,
+        cost,
+      });
+      return newMap;
+    });
+
+    toast.success('Pricing settings updated', {
+      description: `Base: $${basePrice.toFixed(2)}, Max: $${maxPrice.toFixed(2)}, Cost: $${cost.toFixed(2)}`,
+    });
+  };
+
+  // Quick edit handlers for inline price editing
+  const handleStartQuickEdit = (field: 'basePrice' | 'currentPrice' | 'maxPrice', currentValue: number) => {
+    setEditingQuickField(field);
+    setQuickEditValue(currentValue.toFixed(2));
+  };
+
+  const handleSaveQuickEdit = async () => {
+    if (!editingQuickField || !selectedProductId) return;
+    
+    const newValue = parseFloat(quickEditValue);
+    if (isNaN(newValue) || newValue <= 0) {
+      toast.error('Invalid price', { description: 'Please enter a valid positive number' });
+      return;
+    }
+
+    // Update the state based on which field is being edited
+    if (editingQuickField === 'basePrice') {
+      setBasePrice(newValue);
+    } else if (editingQuickField === 'maxPrice') {
+      setMaxPrice(newValue);
+    }
+
+    // Update product in the main updates map
+    setProductUpdates(prev => {
+      const newMap = new Map(prev);
+      const existingUpdates = newMap.get(selectedProductId) || {};
+      newMap.set(selectedProductId, { 
+        ...existingUpdates, 
+        [editingQuickField]: newValue 
+      });
+      return newMap;
+    });
+
+    setEditingQuickField(null);
+    toast.success('Price updated');
+  };
+
+  const handleCancelQuickEdit = () => {
+    setEditingQuickField(null);
+  };
+
+  const handleQuickEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveQuickEdit();
+    } else if (e.key === 'Escape') {
+      handleCancelQuickEdit();
+    }
+  };
+
+  // Mock price history
+  const mockPriceHistory = [
+    { date: 'Jan 15, 2025', oldPrice: 52.0, newPrice: 49.99, reason: 'Smart Pricing', revenue: 1250 },
+    { date: 'Jan 10, 2025', oldPrice: 55.0, newPrice: 52.0, reason: 'Smart Pricing', revenue: 890 },
+    { date: 'Jan 05, 2025', oldPrice: 50.0, newPrice: 55.0, reason: 'Smart Pricing', revenue: 1100 },
+  ];
+
   const selectedProduct = products.find(p => p.id === showingVariantsForProduct);
+  const selectedAnalyticsProduct = selectedProductId ? products.find(p => p.id === selectedProductId) : null;
+  
+  console.log('🔍 selectedProductId:', selectedProductId);
+  console.log('🔍 selectedAnalyticsProduct:', selectedAnalyticsProduct?.title);
   
   const priceRange = selectedProduct && selectedProduct.variants.length > 1 
     ? `$${Math.min(...selectedProduct.variants.map(v => parseFloat(v.price))).toFixed(2)} - $${Math.max(...selectedProduct.variants.map(v => parseFloat(v.price))).toFixed(2)}`
@@ -573,6 +770,80 @@ export default function ProductsPage() {
                 </Badge>
               </Link>
             </div>
+            {/* Sync Products Button */}
+            <Button
+              onClick={() => {
+                if (selectedStoreId) {
+                  const loadingToast = toast.loading('Syncing products from Shopify...');
+                  syncProducts.mutate(selectedStoreId, {
+                    onSuccess: (data) => {
+                      toast.dismiss(loadingToast);
+                      if (data?.success) {
+                        toast.success(`Synced ${data.data?.syncedProducts || 0} products!`);
+                      } else {
+                        toast.error(data?.error || 'Sync failed');
+                      }
+                    },
+                    onError: (error) => {
+                      toast.dismiss(loadingToast);
+                      toast.error(`Sync failed: ${error.message}`);
+                    }
+                  });
+                } else {
+                  toast.error('Please select a store first');
+                }
+              }}
+              disabled={productsLoading || syncProducts.isPending}
+              variant="outline"
+              className="gap-2"
+            >
+              <Package className="h-4 w-4" />
+              {syncProducts.isPending ? 'Syncing...' : 'Sync Products'}
+            </Button>
+            
+            {/* Test Sync Button */}
+            <Button
+              onClick={async () => {
+                if (selectedStoreId) {
+                  toast.loading('Running diagnostics...');
+                  try {
+                    const response = await fetch('/api/shopify/test-sync', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ storeId: selectedStoreId }),
+                    });
+                    const result = await response.json();
+                    toast.dismiss();
+                    
+                    if (result.success) {
+                      toast.success('Diagnostics passed!', {
+                        description: `Shopify: ${result.diagnostic.productsInShopify} products, Database: ${result.diagnostic.productsInDatabase}`,
+                      });
+                      console.log('📊 Full diagnostic:', result);
+                    } else {
+                      toast.error(`Diagnostic failed at ${result.step}`, {
+                        description: result.error,
+                      });
+                      console.error('❌ Diagnostic error:', result);
+                    }
+                  } catch (error) {
+                    toast.dismiss();
+                    toast.error('Failed to run diagnostics');
+                    console.error('Diagnostic error:', error);
+                  }
+                } else {
+                  toast.error('Please select a store first');
+                }
+              }}
+              variant="outline"
+              size="sm"
+              title="Test Sync Connection"
+              className="gap-2"
+            >
+              <AlertCircle className="h-4 w-4" />
+              <span className="hidden sm:inline">Test</span>
+            </Button>
+            
             {/* Global Smart Pricing Toggle */}
             <PowerButton 
               enabled={globalEnabled}
@@ -798,6 +1069,10 @@ export default function ProductsPage() {
                 isShowingVariants={product.id === showingVariantsForProduct}
                 smartPricingEnabled={isProductEnabled(product.id)}
                 onSmartPricingToggle={(enabled, newPrice) => handleProductSmartPricingToggle(product.id, enabled, newPrice)}
+                onViewAnalytics={(id) => {
+                  console.log('🚀 onViewAnalytics clicked for product ID:', id);
+                  handleViewAnalytics(id);
+                }}
                 globalSmartPricingEnabled={globalEnabled}
               />
             ))}
@@ -907,6 +1182,324 @@ export default function ProductsPage() {
         basePrice={globalPriceOptions?.base || 0}
         lastSmartPrice={globalPriceOptions?.last || 0}
       />
+
+      {/* Right-Side Analytics Panel (Sheet) */}
+      <Sheet open={!!selectedProductId} onOpenChange={(open) => {
+        console.log('📊 Sheet onOpenChange:', open, 'selectedProductId:', selectedProductId);
+        if (!open) setSelectedProductId(null);
+      }}>
+        <SheetContent 
+          side="right" 
+          className="w-full sm:!max-w-[500px] overflow-y-auto p-0 transition-all duration-700 ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right-1/2 data-[state=open]:slide-in-from-right-1/2 data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+        >
+          {selectedAnalyticsProduct && (
+            <>
+              {/* Header with Product Image */}
+              <div className="relative h-48 bg-gradient-to-br from-muted to-muted/50">
+                {selectedAnalyticsProduct.images[0] && (
+                  <>
+                    <Image
+                      src={selectedAnalyticsProduct.images[0].src}
+                      alt={selectedAnalyticsProduct.title}
+                      fill
+                      className="object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/75" />
+                  </>
+                )}
+                <div className="absolute bottom-0 left-0 right-0 p-6">
+                  <SheetTitle className="text-2xl mb-1 text-white" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+                    {selectedAnalyticsProduct.title}
+                  </SheetTitle>
+                  <SheetDescription className="text-white/90" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+                    {selectedAnalyticsProduct.vendor} • {selectedAnalyticsProduct.variants.reduce((sum, v) => sum + (v.inventoryQuantity || 0), 0)} in stock
+                  </SheetDescription>
+                </div>
+              </div>
+
+              <div className="p-6">
+                {/* Smart Pricing Toggle - Prominent at top */}
+                <div className="mb-6 p-4 bg-muted/30 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Zap className={`h-5 w-5 ${isProductEnabled(selectedAnalyticsProduct.id) ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <div>
+                        <p className="font-semibold">Smart Pricing</p>
+                        <p className="text-xs text-muted-foreground">
+                          {isProductEnabled(selectedAnalyticsProduct.id) ? 'Active - Auto-adjusting price' : 'Disabled - Using base price'}
+                        </p>
+                      </div>
+                    </div>
+                    <Switch 
+                      checked={isProductEnabled(selectedAnalyticsProduct.id)}
+                      onCheckedChange={(checked) => handleProductSmartPricingToggle(selectedAnalyticsProduct.id, checked)}
+                    />
+                  </div>
+                </div>
+
+                <Tabs defaultValue="analytics" className="w-full">
+                  <TabsList className="grid w-full grid-cols-4 mb-6">
+                    <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                    <TabsTrigger value="performance">Performance</TabsTrigger>
+                    <TabsTrigger value="settings">Settings</TabsTrigger>
+                    <TabsTrigger value="history">History</TabsTrigger>
+                  </TabsList>
+
+                  {/* Analytics Tab */}
+                  <TabsContent value="analytics" className="space-y-5">
+                    {/* Editable Pricing Fields */}
+                    <div className="space-y-3">
+                      {/* Base Price - Editable */}
+                      <div className="p-4 bg-muted/30 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-muted-foreground">Base Price</span>
+                          {editingQuickField === 'basePrice' ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={quickEditValue}
+                                onChange={(e) => setQuickEditValue(e.target.value)}
+                                onKeyDown={handleQuickEditKeyDown}
+                                className="w-28 text-right h-9"
+                                autoFocus
+                              />
+                              <Button size="sm" variant="ghost" onClick={handleSaveQuickEdit}>
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={handleCancelQuickEdit}>
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl font-bold">${selectedAnalyticsProduct.pricing.basePrice.toFixed(2)}</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleStartQuickEdit('basePrice', selectedAnalyticsProduct.pricing.basePrice)}
+                              >
+                                <DollarSign className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Starting price for smart pricing algorithm</p>
+                      </div>
+
+                      {/* Current Price - Editable */}
+                      <div className="p-4 bg-primary/10 rounded-lg border-2 border-primary/30">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-muted-foreground">Current Price</span>
+                          {editingQuickField === 'currentPrice' ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={quickEditValue}
+                                onChange={(e) => setQuickEditValue(e.target.value)}
+                                onKeyDown={handleQuickEditKeyDown}
+                                className="w-28 text-right h-9"
+                                autoFocus
+                              />
+                              <Button size="sm" variant="ghost" onClick={handleSaveQuickEdit}>
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={handleCancelQuickEdit}>
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-3xl font-bold text-primary">${selectedAnalyticsProduct.pricing.currentPrice.toFixed(2)}</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleStartQuickEdit('currentPrice', selectedAnalyticsProduct.pricing.currentPrice)}
+                              >
+                                <DollarSign className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Active price on Shopify store</p>
+                      </div>
+
+                      {/* Maximum Price - Editable */}
+                      <div className="p-4 bg-muted/30 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-muted-foreground">Maximum Price</span>
+                          {editingQuickField === 'maxPrice' ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={quickEditValue}
+                                onChange={(e) => setQuickEditValue(e.target.value)}
+                                onKeyDown={handleQuickEditKeyDown}
+                                className="w-28 text-right h-9"
+                                autoFocus
+                              />
+                              <Button size="sm" variant="ghost" onClick={handleSaveQuickEdit}>
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={handleCancelQuickEdit}>
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl font-bold">${selectedAnalyticsProduct.pricing.maxPrice.toFixed(2)}</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleStartQuickEdit('maxPrice', selectedAnalyticsProduct.pricing.maxPrice)}
+                              >
+                                <DollarSign className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Maximum price ceiling for algorithm</p>
+                      </div>
+
+                      {/* Profit Margin */}
+                      <div className="p-4 bg-green-500/10 rounded-lg border border-green-500/20">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-muted-foreground">Profit Margin</span>
+                          <span className="text-2xl font-bold text-green-600">
+                            {(((selectedAnalyticsProduct.pricing.currentPrice - selectedAnalyticsProduct.pricing.cost) / selectedAnalyticsProduct.pricing.currentPrice) * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Profit: ${(selectedAnalyticsProduct.pricing.currentPrice - selectedAnalyticsProduct.pricing.cost).toFixed(2)} per unit
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Variants List */}
+                    {selectedAnalyticsProduct.variants.length > 1 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Variants ({selectedAnalyticsProduct.variants.length})</p>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {selectedAnalyticsProduct.variants.map((variant) => (
+                            <div key={variant.id} className="flex justify-between items-center py-2 px-3 bg-muted/20 rounded text-sm">
+                              <div>
+                                <p className="font-medium">{variant.title}</p>
+                                <p className="text-xs text-muted-foreground">{variant.inventoryQuantity || 0} in stock</p>
+                              </div>
+                              <p className="font-semibold">${parseFloat(variant.price).toFixed(2)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* Performance Tab */}
+                  <TabsContent value="performance" className="space-y-5">
+                    {loadingPerformance ? (
+                      <div className="flex items-center justify-center py-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        <span className="ml-3 text-muted-foreground">Loading performance data...</span>
+                      </div>
+                    ) : performanceData && (performanceData.summary as Record<string, unknown>) ? (
+                      <>
+                        {/* Smart Pricing Impact */}
+                        <div className="p-5 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/20 dark:to-green-950/10 rounded-lg border-2 border-green-200 dark:border-green-900">
+                          <div className="flex items-center gap-2 mb-3">
+                            <TrendingUp className="h-5 w-5 text-green-600" />
+                            <h4 className="font-semibold text-lg">Smart Pricing Impact</h4>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Revenue Increase</p>
+                              <p className="text-3xl font-bold text-green-600">
+                                {((performanceData.summary as Record<string, unknown>).revenueIncreasePercent as number || 0).toFixed(1)}%
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
+                              <p className="text-3xl font-bold">${((performanceData.summary as Record<string, unknown>).totalRevenue as number || 0).toFixed(2)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="p-8 text-center bg-muted/30 rounded-lg">
+                        <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                        <p className="text-sm text-muted-foreground">No performance data available</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Performance metrics will appear once smart pricing makes changes
+                        </p>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* Settings Tab */}
+                  <TabsContent value="settings" className="space-y-5">
+                    <div className="p-5 bg-muted/30 rounded-lg space-y-4">
+                      <div className="space-y-2">
+                        <Label>Base Price</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={basePrice}
+                          onChange={(e) => setBasePrice(parseFloat(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Max Price</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={maxPrice}
+                          onChange={(e) => setMaxPrice(parseFloat(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Cost</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={cost}
+                          onChange={(e) => setCost(parseFloat(e.target.value))}
+                        />
+                      </div>
+                    </div>
+                    <Button onClick={handleSaveSettings} className="w-full" size="lg">
+                      Save Settings
+                    </Button>
+                  </TabsContent>
+
+                  {/* History Tab */}
+                  <TabsContent value="history" className="space-y-5">
+                    <div className="space-y-2">
+                      {mockPriceHistory.map((entry, index) => (
+                        <div key={index} className="p-4 bg-muted/30 rounded-lg">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <p className="text-sm font-medium">${entry.oldPrice} → ${entry.newPrice}</p>
+                              <p className="text-xs text-muted-foreground">{entry.date}</p>
+                            </div>
+                            <Badge variant={entry.reason === 'Smart Pricing' ? 'default' : 'secondary'}>
+                              {entry.reason}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Revenue: ${entry.revenue.toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

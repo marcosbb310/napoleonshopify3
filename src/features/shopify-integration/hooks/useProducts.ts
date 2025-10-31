@@ -59,6 +59,7 @@ export function useProducts(storeId?: string, filters?: ProductFilters) {
           id,
           shopify_id,
           title,
+          description,
           handle,
           vendor,
           product_type,
@@ -79,6 +80,9 @@ export function useProducts(storeId?: string, filters?: ProductFilters) {
             image_url,
             created_at,
             updated_at
+          ),
+          pricing_config(
+            auto_pricing_enabled
           )
         `)
         .eq('store_id', storeId)
@@ -118,11 +122,24 @@ export function useProducts(storeId?: string, filters?: ProductFilters) {
       }
 
       console.log('✅ Products fetched successfully:', data?.length || 0);
+      
+      // Log first product's IDs for debugging
+      if (data && data.length > 0) {
+        console.log('🔍 First product IDs:', {
+          db_id: data[0].id,
+          db_id_type: typeof data[0].id,
+          shopify_id: data[0].shopify_id,
+          shopify_id_type: typeof data[0].shopify_id,
+          shopify_id_length: data[0].shopify_id?.length,
+          title: data[0].title
+        });
+      }
 
       // Transform data to match ShopifyProduct interface
       const transformedProducts: ShopifyProduct[] = (data || []).map(product => ({
         id: product.shopify_id,
         title: product.title,
+        description: product.description || '',
         handle: product.handle,
         vendor: product.vendor,
         productType: product.product_type,
@@ -130,10 +147,11 @@ export function useProducts(storeId?: string, filters?: ProductFilters) {
         status: product.status,
         variants: (product.variants || []).map((variant: any) => ({
           id: variant.shopify_id,
+          productId: product.shopify_id,
           title: variant.title,
-          price: parseFloat(variant.price || '0'),
-          compareAtPrice: variant.compare_at_price ? parseFloat(variant.compare_at_price) : null,
-          sku: variant.sku,
+          sku: variant.sku || '',
+          price: variant.price?.toString() || '0',
+          compareAtPrice: variant.compare_at_price ? variant.compare_at_price.toString() : undefined,
           inventoryQuantity: variant.inventory_quantity || 0,
           weight: variant.weight || 0,
           weightUnit: variant.weight_unit || 'kg',
@@ -148,6 +166,7 @@ export function useProducts(storeId?: string, filters?: ProductFilters) {
           createdAt: variant.created_at,
           updatedAt: variant.updated_at,
         })),
+        images: [],
         createdAt: product.created_at,
         updatedAt: product.updated_at,
       }));
@@ -164,9 +183,12 @@ export function useProducts(storeId?: string, filters?: ProductFilters) {
   // Sync products from Shopify
   const syncProducts = useMutation({
     mutationFn: async (storeId: string) => {
+      console.log('🚀 SYNC DEBUG: Calling /api/shopify/sync with storeId:', storeId);
       const response = await fetch('/api/shopify/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ storeId }),
       });
 

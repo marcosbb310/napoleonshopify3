@@ -17,7 +17,6 @@ import {
   Plug
 } from 'lucide-react'
 import { useStores, Store as StoreType } from '../hooks/useStores'
-import { useOAuthFlow } from '@/features/shopify-oauth/hooks/useOAuthFlow'
 import { toast } from 'sonner'
 
 interface StoreConnectionCardProps {
@@ -34,7 +33,6 @@ export function StoreConnectionCard({ store, onDisconnect }: StoreConnectionCard
     error_message?: string;
   } | null>(null)
   const { testConnection, disconnectStore } = useStores()
-  const { initiateOAuth: initiateOAuthFlow } = useOAuthFlow()
 
   const handleVerifyConnection = async () => {
     setIsVerifying(true)
@@ -73,18 +71,37 @@ export function StoreConnectionCard({ store, onDisconnect }: StoreConnectionCard
       toast.success('Disconnected. Reconnecting with new permissions...')
       
       // Small delay to ensure disconnect is complete
-      setTimeout(() => {
+      setTimeout(async () => {
         // Initiate OAuth for the same store domain
         const shopDomain = store.shop_domain
-        if (shopDomain) {
-          // Use the initiateOAuth flow but pre-fill the store domain
+        if (!shopDomain) {
+          toast.error('Shop domain not found')
+          return
+        }
+
+        try {
+          // Call the OAuth initiate endpoint
+          const response = await fetch('/api/auth/shopify/v2/initiate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shopDomain }),
+          })
+
+          const data = await response.json()
+
+          if (!data.success || !data.oauthUrl) {
+            toast.error(data.error || 'Failed to initiate OAuth')
+            return
+          }
+
+          // Open OAuth URL in popup
           const width = 600
           const height = 700
           const left = window.screen.width / 2 - width / 2
           const top = window.screen.height / 2 - height / 2
           
           const popup = window.open(
-            `/api/auth/shopify?shop=${encodeURIComponent(shopDomain)}`,
+            data.oauthUrl,
             'shopify-reconnect',
             `width=${width},height=${height},left=${left},top=${top}`
           )
@@ -111,6 +128,8 @@ export function StoreConnectionCard({ store, onDisconnect }: StoreConnectionCard
           }
           
           window.addEventListener('message', messageHandler)
+        } catch (error) {
+          toast.error(`Failed to reconnect: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
       }, 1000)
     } catch (error) {

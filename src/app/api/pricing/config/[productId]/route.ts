@@ -45,17 +45,21 @@ export async function PATCH(
   { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
+    const { productId } = await params;
+    console.log('🔷 PATCH /api/pricing/config/[productId] called with:', productId);
+    
     // NEW AUTH: Require authenticated store
     const { user, store, error: authError } = await requireStore(request);
     if (authError) return authError;
 
-    const { productId } = await params;
     const body = await request.json();
+    console.log('🔷 Request body:', body);
     const supabaseAdmin = createAdminClient();
 
     // Check if this is a smart pricing toggle
     if (body.auto_pricing_enabled !== undefined) {
-      return handleSmartPricingToggle(productId, body.auto_pricing_enabled);
+      console.log('🔷 Calling handleSmartPricingToggle');
+      return handleSmartPricingToggle(productId, body.auto_pricing_enabled, supabaseAdmin, store.id);
     }
 
     // Allowed fields to update (non-toggle changes)
@@ -110,39 +114,112 @@ export async function PATCH(
 }
 
 // Handle smart pricing toggle logic
-async function handleSmartPricingToggle(productId: string, enabled: boolean) {
+async function handleSmartPricingToggle(productId: string, enabled: boolean, supabaseAdmin: ReturnType<typeof createAdminClient>, storeId?: string) {
   try {
+    console.log('\n🔍 ===== SMART PRICING TOGGLE DEBUG =====');
+    console.log('🔍 Received productId:', JSON.stringify(productId));
+    console.log('🔍 ProductId type:', typeof productId);
+    console.log('🔍 ProductId length:', productId.length);
+    console.log('🔍 ProductId charCodes:', Array.from(productId).map(c => c.charCodeAt(0)));
+    console.log('🔍 Enabled:', enabled);
+    console.log('🔍 Store ID provided:', storeId || 'NOT PROVIDED');
+    console.log('========================================\n');
+    
     // Try to find product by UUID first, then by Shopify ID
     let product: Record<string, unknown> | null = null;
     let productError: unknown = null;
+    let actualProductId: string = productId; // Will be set to UUID if found by Shopify ID
+    
+    // Build base query with store filter if provided
+    const baseQuery = storeId 
+      ? (query: ReturnType<typeof supabaseAdmin.from>) => query.eq('store_id', storeId)
+      : (query: ReturnType<typeof supabaseAdmin.from>) => query;
     
     // First try as UUID
-    const uuidResult = await supabaseAdmin
+    console.log('🔍 Trying to find product by UUID:', productId);
+    let uuidQuery = supabaseAdmin
       .from('products')
       .select('*, pricing_config(*)')
-      .eq('id', productId)
-      .single();
+      .eq('id', productId);
+    
+    if (storeId) {
+      uuidQuery = uuidQuery.eq('store_id', storeId);
+      console.log('🔍 Filtering by store_id:', storeId);
+    }
+    
+    const uuidResult = await uuidQuery.single();
+    
+    console.log('🔍 UUID lookup result:', {
+      hasError: !!uuidResult.error,
+      errorCode: uuidResult.error?.code,
+      errorMessage: uuidResult.error?.message,
+      hasData: !!uuidResult.data
+    });
     
     if (!uuidResult.error && uuidResult.data) {
+      console.log('✅ Found by UUID:', uuidResult.data.id);
       product = uuidResult.data;
     } else {
       // Try as Shopify ID
-      const shopifyResult = await supabaseAdmin
+      console.log('🔍 Trying to find product by Shopify ID:', productId);
+      let shopifyQuery = supabaseAdmin
         .from('products')
         .select('*, pricing_config(*)')
-        .eq('shopify_id', productId)
-        .single();
+        .eq('shopify_id', productId);
+      
+      if (storeId) {
+        shopifyQuery = shopifyQuery.eq('store_id', storeId);
+      }
+      
+      const shopifyResult = await shopifyQuery.single();
+      
+      console.log('🔍 Shopify lookup result:', {
+        hasError: !!shopifyResult.error,
+        errorCode: shopifyResult.error?.code,
+        errorMessage: shopifyResult.error?.message,
+        hasData: !!shopifyResult.data,
+        data: shopifyResult.data ? { 
+          id: shopifyResult.data.id, 
+          shopify_id: shopifyResult.data.shopify_id,
+          store_id: shopifyResult.data.store_id,
+          title: shopifyResult.data.title 
+        } : null
+      });
+      
+      // Log the exact error if it exists
+      if (shopifyResult.error) {
+        console.log('🔍 Raw error object:', JSON.stringify(shopifyResult.error, Object.getOwnPropertyNames(shopifyResult.error)));
+      }
+      
+      // Also log some sample product IDs from database for debugging
+      let sampleQuery = supabaseAdmin
+        .from('products')
+        .select('id, shopify_id, store_id, title');
+      
+      if (storeId) {
+        sampleQuery = sampleQuery.eq('store_id', storeId);
+        console.log('🔍 Filtering sample by store_id:', storeId);
+      } else {
+        console.log('⚠️ NO STORE ID PROVIDED - querying all stores');
+      }
+      
+      const sampleResult = await sampleQuery.limit(5);
+      console.log('🔍 Sample products in database:', JSON.stringify(sampleResult.data, null, 2));
       
       if (!shopifyResult.error && shopifyResult.data) {
         product = shopifyResult.data;
+        actualProductId = product.id as string; // Use the database UUID
+        console.log('✅ Found by Shopify ID, using UUID:', actualProductId);
       } else {
         productError = shopifyResult.error;
+        console.error('❌ Both lookups failed. UUID error:', uuidResult.error, 'Shopify error:', shopifyResult.error);
       }
     }
 
     if (productError || !product) {
+      console.error('❌ Product not found after all attempts');
       return NextResponse.json(
-        { success: false, error: 'Product not found' },
+        { success: false, error: 'Product not found', productId },
         { status: 404 }
       );
     }
@@ -158,7 +235,7 @@ async function handleSmartPricingToggle(productId: string, enabled: boolean) {
         await supabaseAdmin
           .from('pricing_config')
           .update({ pre_smart_pricing_price: product.current_price })
-          .eq('product_id', productId);
+          .eq('product_id', actualProductId);
       }
 
       return NextResponse.json({
@@ -167,7 +244,7 @@ async function handleSmartPricingToggle(productId: string, enabled: boolean) {
         preSmart: config.pre_smart_pricing_price || product.current_price,
         lastSmart: config.last_smart_pricing_price || product.current_price,
         snapshot: {
-          productId,
+          productId: product.shopify_id as string, // Use Shopify ID for snapshots
           price: product.current_price,
           auto_pricing_enabled: false,
           state: config.current_state,
@@ -186,23 +263,23 @@ async function handleSmartPricingToggle(productId: string, enabled: boolean) {
           current_state: 'increasing',
           revert_wait_until_date: null,
         })
-        .eq('product_id', productId);
+        .eq('product_id', actualProductId);
 
       // Update product price
       await supabaseAdmin
         .from('products')
         .update({ current_price: priceToRevert })
-        .eq('id', productId);
+        .eq('id', actualProductId);
 
       // Update Shopify
-      await updateShopifyPrice(product.shopify_id, priceToRevert);
+      await updateShopifyPrice(product.shopify_id as string, priceToRevert);
 
       return NextResponse.json({
         success: true,
         reverted: true,
         revertedTo: priceToRevert,
         snapshot: {
-          productId,
+          productId: product.shopify_id as string, // Use Shopify ID for snapshots
           price: product.current_price,
           auto_pricing_enabled: true,
           state: config.current_state,

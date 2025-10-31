@@ -63,6 +63,7 @@ export function useStores() {
           user_id
         `)
         .eq('is_active', true)
+        .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
 
       if (error) {

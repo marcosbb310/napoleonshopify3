@@ -84,10 +84,16 @@ export function useSmartPricingToggle({ productId, productName, onUndoSet }: Use
     try {
       // Only handle disable here since enable goes directly to resume modal
       if (pendingAction === 'disable') {
+        console.log('🔴 [handleConfirmToggle] Disabling smart pricing');
+        console.log('🔴 productId:', productId);
+        console.log('🔴 productId type:', typeof productId);
+        console.log('🔴 productId length:', productId.length);
+        console.log('🔴 Calling API with:', { productId, auto_pricing_enabled: false });
         const data = await updateConfigMutation.mutateAsync({
           productId,
           auto_pricing_enabled: false,
         });
+        console.log('🔴 [handleConfirmToggle] API response:', data);
 
         if (data.reverted) {
           // Update local state immediately for instant UI feedback

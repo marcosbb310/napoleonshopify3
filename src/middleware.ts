@@ -24,8 +24,17 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Add security headers to all responses
-    response.headers.set('X-Frame-Options', 'DENY')
+    // IMPORTANT: Don't set X-Frame-Options: DENY for OAuth callback routes
+    // OAuth callbacks need to open in popups, which DENY would block
+    const isOAuthCallback = request.nextUrl.pathname.startsWith('/api/auth/shopify/v2/callback')
+    
+    // Add security headers to all responses (except OAuth callback)
+    if (!isOAuthCallback) {
+      response.headers.set('X-Frame-Options', 'DENY')
+    } else {
+      // Allow OAuth callback to be opened in popup
+      response.headers.set('X-Frame-Options', 'SAMEORIGIN')
+    }
     response.headers.set('X-Content-Type-Options', 'nosniff')
     response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
     response.headers.set('X-XSS-Protection', '1; mode=block')

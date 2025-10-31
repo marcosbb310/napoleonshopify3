@@ -86,7 +86,23 @@ export function useLogin() {
         throw error
       }
       
-      // Log successful login
+      // Get user profile to update login tracking
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', data.user.id)
+        .single()
+      
+      // Track login event
+      if (userProfile) {
+        fetch('/api/auth/track-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: userProfile.id }),
+        }).catch(console.error)
+      }
+      
+      // Also log to auth_events
       fetch('/api/auth/log-event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -10,7 +10,10 @@ export async function GET(request: NextRequest) {
     if (error) return error;
 
     const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
-    const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/shopify/product-update`;
+    // Shopify CLI provides SHOPIFY_APP_URL when using 'shopify app dev'
+    // Fall back to NEXT_PUBLIC_APP_URL for manual setup
+    const BASE_URL = process.env.SHOPIFY_APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+    const webhookUrl = `${BASE_URL}/api/webhooks/shopify/product-update`;
     const baseUrl = `https://${store.shop_domain}/admin/api/${apiVersion}`;
 
     // Check registered webhooks in Shopify
@@ -87,6 +90,10 @@ export async function POST(request: NextRequest) {
     const { action } = await request.json();
 
     if (action === 'test_webhook') {
+      // Shopify CLI provides SHOPIFY_APP_URL when using 'shopify app dev'
+      // Fall back to NEXT_PUBLIC_APP_URL for manual setup
+      const BASE_URL = process.env.SHOPIFY_APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+      
       // Send test webhook to our endpoint
       const testPayload = {
         id: 999999,
@@ -99,7 +106,7 @@ export async function POST(request: NextRequest) {
         .digest('base64');
 
       const testResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/shopify/product-update`,
+        `${BASE_URL}/api/webhooks/shopify/product-update`,
         {
           method: 'POST',
           headers: {

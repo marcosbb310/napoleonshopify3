@@ -171,7 +171,20 @@ async function processProductBatch(storeId: string, products: ShopifyProduct[]):
   // Process variants for each product
   for (const product of products) {
     if (product.variants && product.variants.length > 0) {
-      await processProductVariants(storeId, product.id, product.variants);
+      // First, get the internal database ID for this product
+      const { data: dbProduct } = await supabase
+        .from('products')
+        .select('id')
+        .eq('store_id', storeId)
+        .eq('shopify_id', product.id)
+        .single();
+      
+      if (dbProduct) {
+        // Use the internal database UUID
+        await processProductVariants(storeId, dbProduct.id, product.variants, product.id);
+      } else {
+        console.error(`❌ Could not find internal ID for product with shopify_id: ${product.id}`);
+      }
     }
   }
 }
@@ -181,15 +194,18 @@ async function processProductBatch(storeId: string, products: ShopifyProduct[]):
  */
 async function processProductVariants(
   storeId: string,
-  productId: string,
-  variants: ShopifyProduct['variants']
+  productDbId: string,  // Internal database UUID
+  variants: ShopifyProduct['variants'],
+  shopifyProductId: string  // Shopify product ID for logging
 ): Promise<void> {
   const supabase = createAdminClient();
+  
+  console.log(`🔄 Processing variants for product shopify_id: ${shopifyProductId}, db_id: ${productDbId}`);
 
   // Prepare variants for upsert
   const variantsToUpsert = variants.map(variant => ({
     store_id: storeId,
-    product_id: productId,
+    product_id: productDbId,  // Use internal database UUID
     shopify_id: variant.id,
     title: variant.title,
     price: variant.price.toString(),

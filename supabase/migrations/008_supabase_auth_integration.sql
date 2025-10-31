@@ -11,8 +11,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN DEFAULT false;
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.users (auth_user_id, email, name)
-  VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)))
+  INSERT INTO public.users (auth_user_id, email, name, email_verified)
+  VALUES (
+    NEW.id, 
+    NEW.email, 
+    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    NEW.email_confirmed_at IS NOT NULL
+  )
   ON CONFLICT (auth_user_id) DO NOTHING;
   RETURN NEW;
 END;

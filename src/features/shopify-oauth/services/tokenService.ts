@@ -12,8 +12,14 @@ import type { TokenSet } from '../types';
  * - Tokens never stored in plain text
  */
 
-// Get the decoded encryption key
-const ENCRYPTION_KEY = getEncryptionKey();
+// Get the decoded encryption key (lazy loaded to avoid errors at module load time)
+function getEncryptionKeyLazy(): string {
+  try {
+    return getEncryptionKey();
+  } catch (error) {
+    throw new Error(`Encryption key error: ${error instanceof Error ? error.message : 'Unknown error'}. Please check ENCRYPTION_KEY environment variable.`);
+  }
+}
 
 /**
  * Encrypt and store Shopify access tokens
@@ -38,12 +44,15 @@ export async function encryptAndStoreTokens(
 ): Promise<string> {
   const supabase = createAdminClient();
   
+  // Get encryption key (lazy loaded)
+  const encryptionKey = getEncryptionKeyLazy();
+  
   // Encrypt the access token using PostgreSQL function
   const { data: encryptedToken, error: encryptError } = await supabase.rpc(
     'encrypt_token',
     {
       token_text: tokens.accessToken,
-      key: ENCRYPTION_KEY,
+      key: encryptionKey,
     }
   );
   
@@ -126,12 +135,15 @@ export async function getDecryptedTokens(storeId: string): Promise<TokenSet> {
     throw new Error(`Store not found: ${fetchError?.message}`);
   }
   
+  // Get encryption key (lazy loaded)
+  const encryptionKey = getEncryptionKeyLazy();
+  
   // Decrypt the access token using PostgreSQL function
   const { data: decryptedToken, error: decryptError } = await supabase.rpc(
     'decrypt_token',
     {
       encrypted_data: store.access_token_encrypted,
-      key: ENCRYPTION_KEY,
+      key: encryptionKey,
     }
   );
   

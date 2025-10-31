@@ -13,7 +13,10 @@ export async function POST(request: NextRequest) {
     if (action === 'reregister_webhooks') {
       // Re-register webhooks
       const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
-      const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/shopify/product-update`;
+      // Shopify CLI provides SHOPIFY_APP_URL when using 'shopify app dev'
+      // Fall back to NEXT_PUBLIC_APP_URL for manual setup
+      const BASE_URL = process.env.SHOPIFY_APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+      const webhookUrl = `${BASE_URL}/api/webhooks/shopify/product-update`;
       const baseUrl = `https://${store.shop_domain}/admin/api/${apiVersion}`;
 
       // Delete existing webhooks
