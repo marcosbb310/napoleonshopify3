@@ -115,47 +115,19 @@ export function useStores() {
   // Disconnect store
   const disconnectStore = useMutation({
     mutationFn: async (storeId: string) => {
-      // Check current user session
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      // Check if user exists in users table
-      const { data: userRecord } = await supabase
-        .from('users')
-        .select('id, auth_user_id, email')
-        .eq('auth_user_id', user?.id)
-        .single()
-      
-      // First, let's check what stores exist before the update
-      const { data: beforeData } = await supabase
-        .from('stores')
-        .select('id, shop_domain, is_active, user_id')
-        .eq('id', storeId)
-      
-      // Check if the store belongs to the current user
-      if (beforeData && beforeData.length > 0) {
-        const store = beforeData[0]
-        if (store.user_id !== userRecord?.id) {
-          throw new Error('You do not have permission to disconnect this store')
-        }
-      } else {
-        throw new Error('Store not found')
-      }
-      
-      const { data, error } = await supabase
-        .from('stores')
-        .update({ 
-          is_active: false,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', storeId)
-        .select()
+      // Use API endpoint for proper cleanup (marks products as inactive)
+      const response = await fetch(`/api/stores/${storeId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      })
 
-      if (error) {
-        console.error('Disconnect store error:', error)
-        throw error
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to disconnect store')
       }
-      
-      return { storeId, data }
+
+      const result = await response.json()
+      return { storeId, data: result }
     },
     onSuccess: ({ storeId, data }) => {
       toast.success('Store disconnected successfully')

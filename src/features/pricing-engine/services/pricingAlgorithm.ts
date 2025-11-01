@@ -53,6 +53,7 @@ interface RevenueData {
  * Run pricing algorithm for all products with autopilot enabled
  */
 export async function runPricingAlgorithm(storeId: string, shopDomain: string, accessToken: string): Promise<AlgorithmResult> {
+  console.log('🔵 PRICING ALGORITHM: Starting for store:', storeId, shopDomain);
   const stats = { processed: 0, increased: 0, reverted: 0, waiting: 0 };
   const errors: string[] = [];
 
@@ -66,8 +67,10 @@ export async function runPricingAlgorithm(storeId: string, shopDomain: string, a
       .single();
 
     const globalEnabled = globalSetting?.value === true || globalSetting?.value === 'true';
+    console.log('🔵 PRICING ALGORITHM: Global enabled:', globalEnabled);
 
     if (!globalEnabled) {
+      console.log('🔵 PRICING ALGORITHM: Skipping - global disabled');
       return { 
         success: true, 
         stats, 
@@ -75,28 +78,90 @@ export async function runPricingAlgorithm(storeId: string, shopDomain: string, a
       };
     }
 
-    // Get all products with autopilot enabled for this store
-    const { data: products } = await supabaseAdmin
+    // Get all products for this store - we'll filter by config later
+    const { data: allProducts } = await supabaseAdmin
       .from('products')
-      .select(`*, pricing_config!inner(*)`)
-      .eq('store_id', storeId) // NEW AUTH: Filter by store
-      .eq('pricing_config.auto_pricing_enabled', true);
+      .select(`*, pricing_config(*)`)
+      .eq('store_id', storeId)
+      .eq('is_active', true);
 
-    if (!products || products.length === 0) {
+    console.log('🔵 PRICING ALGORITHM: Found products:', allProducts?.length || 0);
+
+    if (!allProducts || allProducts.length === 0) {
+      console.log('🔵 PRICING ALGORITHM: No products found');
+      return { success: true, stats, errors: ['No products found for this store'] };
+    }
+
+    // Filter products with auto_pricing_enabled OR create configs for products without them
+    const productsToProcess: Array<{ product: ProductRow; config: PricingConfig }> = [];
+
+    for (const product of allProducts) {
+      let config = Array.isArray(product.pricing_config) 
+        ? product.pricing_config[0] 
+        : product.pricing_config;
+
+      // If no config exists AND global is enabled, create one with auto_pricing_enabled = true
+      // (This handles newly synced products)
+      if (!config && globalEnabled) {
+        const { data: newConfig, error: createError } = await supabaseAdmin
+          .from('pricing_config')
+          .insert({
+            product_id: product.id,
+            auto_pricing_enabled: true, // Auto-enable since global is on
+            current_state: 'increasing',
+            increment_percentage: 5.0,
+            period_hours: 24,
+            revenue_drop_threshold: 1.0,
+            wait_hours_after_revert: 24,
+            max_increase_percentage: 100.0,
+            pre_smart_pricing_price: product.current_price || product.starting_price,
+            base_price: product.current_price || product.starting_price,
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          errors.push(`${product.title}: Failed to create pricing config - ${createError.message}`);
+          continue;
+        }
+
+        config = newConfig as PricingConfig;
+      }
+
+      // Only process if config exists and auto_pricing_enabled is true
+      if (config && config.auto_pricing_enabled) {
+        productsToProcess.push({ product: product as ProductRow, config });
+      }
+    }
+
+    console.log('🔵 PRICING ALGORITHM: Products to process:', productsToProcess.length);
+
+    if (productsToProcess.length === 0) {
+      console.log('🔵 PRICING ALGORITHM: No products with autopilot enabled');
       return { success: true, stats, errors: ['No products with autopilot enabled'] };
     }
 
     // Process each product
-    for (const row of products) {
+    for (const { product, config } of productsToProcess) {
       stats.processed++;
-      const config = Array.isArray(row.pricing_config) ? row.pricing_config[0] : row.pricing_config;
+      console.log(`🔵 PRICING ALGORITHM: Processing product ${stats.processed}/${productsToProcess.length}:`, product.title);
       
       try {
-        await processProduct(row, config, stats, shopDomain, accessToken, storeId);
+        await processProduct(product, config, stats, shopDomain, accessToken, storeId);
       } catch (error) {
-        errors.push(`${row.title}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const errorMsg = `${product.title}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error('🔵 PRICING ALGORITHM: Error processing product:', errorMsg);
+        errors.push(errorMsg);
       }
     }
+
+    console.log('🔵 PRICING ALGORITHM: Completed processing:', {
+      processed: stats.processed,
+      increased: stats.increased,
+      reverted: stats.reverted,
+      waiting: stats.waiting,
+      errors: errors.length
+    });
 
     // Log run
     await supabaseAdmin.from('algorithm_runs').insert({
@@ -298,22 +363,81 @@ async function updatePrice(product: ProductRow, config: PricingConfig, newPrice:
  * Update price in Shopify via API
  */
 async function updateShopifyPrice(shopifyId: string, newPrice: number, shopDomain: string, accessToken: string) {
+  console.log('🔵 UPDATE SHOPIFY: Starting for product:', shopifyId, 'new price:', newPrice);
+  
+  // Validate inputs
+  if (!shopifyId || shopifyId.trim() === '') {
+    throw new Error(`Invalid shopify_id: ${shopifyId}`);
+  }
+
+  // Ensure shopify_id is numeric (Shopify REST API requires numeric IDs)
+  const numericId = shopifyId.replace(/\D/g, ''); // Remove non-numeric characters
+  if (!numericId || numericId !== shopifyId) {
+    console.warn(`⚠️ Shopiy ID "${shopifyId}" was sanitized to "${numericId}" - check if ID format is correct`);
+  }
+
   const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
   const baseUrl = `https://${shopDomain}/admin/api/${apiVersion}`;
+  const productUrl = `${baseUrl}/products/${numericId}.json`;
 
+  console.log('🔵 UPDATE SHOPIFY: Fetching product from:', productUrl);
+  
   // Get product to find variant ID
-  const productRes = await fetch(`${baseUrl}/products/${shopifyId}.json`, {
+  const productRes = await fetch(productUrl, {
     headers: { 'X-Shopify-Access-Token': accessToken },
     cache: 'no-store',
   });
+  
+  console.log('🔵 UPDATE SHOPIFY: Product fetch status:', productRes.status);
 
-  if (!productRes.ok) throw new Error(`Failed to fetch product: ${productRes.statusText}`);
+  let productData: { product?: { variants?: Array<{ id: string }> } };
 
-  const productData = await productRes.json();
+  if (!productRes.ok) {
+    // Try to get detailed error from Shopify
+    let errorMessage = `Failed to fetch product (${productRes.status} ${productRes.statusText})`;
+    try {
+      const errorText = await productRes.text();
+      if (errorText) {
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.errors) {
+            errorMessage = typeof errorData.errors === 'string' 
+              ? errorData.errors 
+              : JSON.stringify(errorData.errors);
+          }
+        } catch {
+          // Not JSON, use raw text
+          errorMessage = errorText.substring(0, 200); // Limit length
+        }
+      }
+    } catch {
+      // If all else fails, use status text
+    }
+    
+    console.error(`❌ Shopify API error for product ${numericId}:`, {
+      status: productRes.status,
+      statusText: productRes.statusText,
+      url: productUrl,
+      shopDomain,
+      originalShopifyId: shopifyId,
+      numericId,
+      errorMessage,
+    });
+
+    throw new Error(errorMessage);
+  } else {
+    productData = await productRes.json();
+  }
   const variantId = productData.product?.variants?.[0]?.id;
+  console.log('🔵 UPDATE SHOPIFY: Found variant ID:', variantId);
 
-  if (!variantId) throw new Error('No variant found');
+  if (!variantId) {
+    console.error('🔵 UPDATE SHOPIFY: No variant found');
+    throw new Error(`No variant found for product ${numericId}`);
+  }
 
+  console.log('🔵 UPDATE SHOPIFY: Updating variant price to:', newPrice.toFixed(2));
+  
   // Update variant price
   const updateRes = await fetch(`${baseUrl}/variants/${variantId}.json`, {
     method: 'PUT',
@@ -330,6 +454,24 @@ async function updateShopifyPrice(shopifyId: string, newPrice: number, shopDomai
     }),
   });
 
-  if (!updateRes.ok) throw new Error(`Failed to update price: ${updateRes.statusText}`);
+  console.log('🔵 UPDATE SHOPIFY: Update response status:', updateRes.status);
+
+  if (!updateRes.ok) {
+    let errorMessage = `Failed to update price (${updateRes.status} ${updateRes.statusText})`;
+    try {
+      const errorData = await updateRes.json();
+      if (errorData.errors) {
+        errorMessage = typeof errorData.errors === 'string'
+          ? errorData.errors
+          : JSON.stringify(errorData.errors);
+      }
+    } catch {
+      // Ignore JSON parse errors
+    }
+    console.error('🔵 UPDATE SHOPIFY: Update failed:', errorMessage);
+    throw new Error(errorMessage);
+  }
+  
+  console.log('🔵 UPDATE SHOPIFY: Successfully updated price for product:', shopifyId);
 }
 

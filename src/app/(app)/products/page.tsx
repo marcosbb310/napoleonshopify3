@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   type ProductFilter, 
   type ProductWithPricing,
@@ -37,6 +38,7 @@ import { X, Check, Undo2, Zap, ZapOff, Search, DollarSign, TrendingUp, BarChart3
 import { toast } from 'sonner';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useAuthenticatedFetch } from '@/shared/lib/apiClient';
 
 export default function ProductsPage() {
   const searchParams = useSearchParams();
@@ -69,6 +71,8 @@ export default function ProductsPage() {
 
   // Get stores and select the first one if none selected
   const { stores, isLoading: storesLoading } = useStores();
+  const authenticatedFetch = useAuthenticatedFetch();
+  const queryClient = useQueryClient();
   
   useEffect(() => {
     if (stores.length > 0 && !selectedStoreId) {
@@ -647,7 +651,7 @@ export default function ProductsPage() {
   };
 
   const handleSaveQuickEdit = async () => {
-    if (!editingQuickField || !selectedProductId) return;
+    if (!editingQuickField || !selectedProductId || !selectedStoreId) return;
     
     const newValue = parseFloat(quickEditValue);
     if (isNaN(newValue) || newValue <= 0) {
@@ -655,11 +659,60 @@ export default function ProductsPage() {
       return;
     }
 
-    // Update the state based on which field is being edited
-    if (editingQuickField === 'basePrice') {
-      setBasePrice(newValue);
-    } else if (editingQuickField === 'maxPrice') {
-      setMaxPrice(newValue);
+    // Only call API for currentPrice (actual Shopify price)
+    // basePrice and maxPrice are local settings only
+    if (editingQuickField === 'currentPrice') {
+      // Show loading toast
+      const loadingToast = toast.loading('Updating price...');
+
+      try {
+        // Call API to update Shopify and database
+        const response = await fetch(`/api/shopify/products/${selectedProductId}/price`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            price: newValue,
+            field: editingQuickField 
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to update price');
+        }
+
+        toast.dismiss(loadingToast);
+        toast.success('Price updated in Shopify!');
+
+        // Update local state
+        setProductUpdates(prev => {
+          const newMap = new Map(prev);
+          const existingUpdates = newMap.get(selectedProductId) || {};
+          newMap.set(selectedProductId, { 
+            ...existingUpdates, 
+            currentPrice: newValue 
+          });
+          return newMap;
+        });
+
+        // Invalidate queries to refetch from database
+        queryClient.invalidateQueries({ queryKey: ['products', selectedStoreId] });
+        
+      } catch (error) {
+        toast.dismiss(loadingToast);
+        toast.error('Failed to update price', {
+          description: error instanceof Error ? error.message : 'Unknown error'
+        });
+        return; // Don't continue if API call failed
+      }
+    } else {
+      // For basePrice and maxPrice, just update local state
+      if (editingQuickField === 'basePrice') {
+        setBasePrice(newValue);
+      } else if (editingQuickField === 'maxPrice') {
+        setMaxPrice(newValue);
+      }
     }
 
     // Update product in the main updates map
@@ -674,7 +727,10 @@ export default function ProductsPage() {
     });
 
     setEditingQuickField(null);
-    toast.success('Price updated');
+    
+    if (editingQuickField !== 'currentPrice') {
+      toast.success('Price updated');
+    }
   };
 
   const handleCancelQuickEdit = () => {
@@ -738,8 +794,59 @@ export default function ProductsPage() {
     <div className="space-y-6 relative">
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-4 mb-2">
+          <div className="flex items-center gap-4 mb-2 flex-wrap">
             <h1 className="text-3xl font-bold tracking-tight">Products</h1>
+            
+            {/* Run Pricing Now Button - MUST BE VISIBLE */}
+            <Button
+              onClick={async () => {
+                if (!selectedStoreId) {
+                  toast.error('Please select a store first');
+                  return;
+                }
+                const t = toast.loading('Running pricing algorithm...');
+                try {
+                  const res = await authenticatedFetch('/api/pricing/run', { method: 'POST' });
+                  const result = await res.json();
+                  toast.dismiss(t);
+                  
+                  if (res.ok && result.success) {
+                    // Check if algorithm was skipped due to global toggle being disabled
+                    if (result.skipped) {
+                      toast.info('Pricing algorithm skipped', {
+                        description: result.message || 'Global smart pricing is disabled. Enable it to run pricing.',
+                        duration: 5000,
+                      });
+                    } else {
+                      const s = result.stats || {};
+                      // Check if any products were actually processed
+                      if (s.processed === 0) {
+                        toast.info('Pricing run completed', {
+                          description: result.message || 'No products were processed',
+                          duration: 5000,
+                        });
+                      } else {
+                        toast.success('Pricing run completed!', {
+                          description: `Processed: ${s.processed || 0}, Increased: ${s.increased || 0}, Reverted: ${s.reverted || 0}`,
+                          duration: 5000,
+                        });
+                        syncProducts.mutate(selectedStoreId);
+                      }
+                    }
+                  } else {
+                    toast.error('Pricing run failed', { description: result.error || result.message || 'Unknown error' });
+                  }
+                } catch (e) {
+                  toast.dismiss(t);
+                  toast.error('Pricing run failed', { description: e instanceof Error ? e.message : 'Unknown error' });
+                }
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-md shadow-lg border-0"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+            >
+              <BarChart3 style={{ width: '16px', height: '16px' }} />
+              Run Pricing Now
+            </Button>
             
             {/* Store Selector */}
             {stores.length > 1 && (

@@ -183,7 +183,8 @@ export function useProducts(storeId?: string, filters?: ProductFilters) {
   // Sync products from Shopify
   const syncProducts = useMutation({
     mutationFn: async (storeId: string) => {
-      console.log('🚀 SYNC DEBUG: Calling /api/shopify/sync with storeId:', storeId);
+      console.log('🔵 SYNC MUTATION: Started with storeId:', storeId);
+      
       const response = await fetch('/api/shopify/sync', {
         method: 'POST',
         headers: { 
@@ -192,7 +193,32 @@ export function useProducts(storeId?: string, filters?: ProductFilters) {
         body: JSON.stringify({ storeId }),
       });
 
+      console.log('🔵 SYNC MUTATION: Response status:', response.status);
+      
+      // Check if response is OK before parsing
+      if (!response.ok) {
+        // Try to get error message from response
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        
+        // Check if response is JSON before trying to parse
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch {
+            // If JSON parse fails, use default error
+          }
+        } else {
+          // Response is HTML (likely 404 page) - provide helpful error
+          errorMessage = `Route not found. Please ensure the sync API route is available. (HTTP ${response.status})`;
+        }
+        
+        throw new Error(errorMessage);
+      }
+
       const result = await response.json();
+      console.log('🔵 SYNC MUTATION: Result:', result);
 
       if (!result.success) {
         throw new Error(result.error || 'Product sync failed');
@@ -200,12 +226,15 @@ export function useProducts(storeId?: string, filters?: ProductFilters) {
 
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('🔵 SYNC MUTATION: onSuccess called with:', data);
       toast.success('Products synced successfully!');
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      console.log('🔵 SYNC MUTATION: Invalidated queries');
       queryClient.invalidateQueries({ queryKey: ['store-sync-statuses'] });
     },
     onError: (error) => {
+      console.log('🔵 SYNC MUTATION: onError called with:', error);
       toast.error(`Product sync failed: ${error.message}`);
     },
   });
