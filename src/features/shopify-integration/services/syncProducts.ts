@@ -203,22 +203,27 @@ async function processProductVariants(
   console.log(`🔄 Processing variants for product shopify_id: ${shopifyProductId}, db_id: ${productDbId}`);
 
   // Prepare variants for upsert
-  const variantsToUpsert = variants.map(variant => ({
-    store_id: storeId,
-    product_id: productDbId,  // Use internal database UUID
-    shopify_id: variant.id,
-    title: variant.title,
-    price: variant.price.toString(),
-    compare_at_price: variant.compareAtPrice?.toString() || null,
-    sku: variant.sku || null,
-    inventory_quantity: variant.inventoryQuantity || 0,
-    weight: variant.weight || 0,
-    weight_unit: variant.weightUnit || 'kg',
-    image_url: variant.image?.src || null,
-    created_at: variant.createdAt,
-    updated_at: variant.updatedAt,
-    is_active: true,
-  }));
+  const variantsToUpsert = variants.map(variant => {
+    const priceDecimal = parseFloat(variant.price);
+    return {
+      store_id: storeId,
+      product_id: productDbId,  // Use internal database UUID
+      shopify_id: variant.id,
+      title: variant.title,
+      price: variant.price.toString(),
+      starting_price: priceDecimal,  // NEW: Set starting price
+      current_price: priceDecimal,   // NEW: Set current price
+      compare_at_price: variant.compareAtPrice?.toString() || null,
+      sku: variant.sku || null,
+      inventory_quantity: variant.inventoryQuantity || 0,
+      weight: variant.weight || 0,
+      weight_unit: variant.weightUnit || 'kg',
+      image_url: variant.image?.src || null,
+      created_at: variant.createdAt,
+      updated_at: variant.updatedAt,
+      is_active: true,
+    };
+  });
 
   // Upsert variants
   const { error: variantsError } = await supabase

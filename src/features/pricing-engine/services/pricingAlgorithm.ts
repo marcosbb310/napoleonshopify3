@@ -12,12 +12,24 @@ export interface AlgorithmResult {
   errors: string[];
 }
 
+interface VariantRow {
+  id: string;
+  title: string;
+  shopify_id: string;
+  starting_price: number;
+  current_price: number;
+  product_id: string;  // Track parent product
+  store_id: string;    // Track store for Shopify updates
+  pricing_config: PricingConfig | PricingConfig[];
+}
+
 interface ProductRow {
   id: string;
   title: string;
   shopify_id: string;
   starting_price: number;
   current_price: number;
+  store_id: string;
   pricing_config: PricingConfig | PricingConfig[];
 }
 
@@ -78,35 +90,35 @@ export async function runPricingAlgorithm(storeId: string, shopDomain: string, a
       };
     }
 
-    // Get all products for this store - we'll filter by config later
-    const { data: allProducts } = await supabaseAdmin
-      .from('products')
+    // Get all variants for this store - we'll filter by config later
+    const { data: allVariants } = await supabaseAdmin
+      .from('product_variants')
       .select(`*, pricing_config(*)`)
       .eq('store_id', storeId)
       .eq('is_active', true);
 
-    console.log('🔵 PRICING ALGORITHM: Found products:', allProducts?.length || 0);
+    console.log('🔵 PRICING ALGORITHM: Found variants:', allVariants?.length || 0);
 
-    if (!allProducts || allProducts.length === 0) {
-      console.log('🔵 PRICING ALGORITHM: No products found');
-      return { success: true, stats, errors: ['No products found for this store'] };
+    if (!allVariants || allVariants.length === 0) {
+      console.log('🔵 PRICING ALGORITHM: No variants found');
+      return { success: true, stats, errors: ['No variants found for this store'] };
     }
 
-    // Filter products with auto_pricing_enabled OR create configs for products without them
-    const productsToProcess: Array<{ product: ProductRow; config: PricingConfig }> = [];
+    // Filter variants with auto_pricing_enabled OR create configs for variants without them
+    const variantsToProcess: Array<{ variant: VariantRow; config: PricingConfig }> = [];
 
-    for (const product of allProducts) {
-      let config = Array.isArray(product.pricing_config) 
-        ? product.pricing_config[0] 
-        : product.pricing_config;
+    for (const variant of allVariants) {
+      let config = Array.isArray(variant.pricing_config) 
+        ? variant.pricing_config[0] 
+        : variant.pricing_config;
 
       // If no config exists AND global is enabled, create one with auto_pricing_enabled = true
-      // (This handles newly synced products)
+      // (This handles newly synced variants)
       if (!config && globalEnabled) {
         const { data: newConfig, error: createError } = await supabaseAdmin
           .from('pricing_config')
           .insert({
-            product_id: product.id,
+            variant_id: variant.id,
             auto_pricing_enabled: true, // Auto-enable since global is on
             current_state: 'increasing',
             increment_percentage: 5.0,
@@ -114,14 +126,14 @@ export async function runPricingAlgorithm(storeId: string, shopDomain: string, a
             revenue_drop_threshold: 1.0,
             wait_hours_after_revert: 24,
             max_increase_percentage: 100.0,
-            pre_smart_pricing_price: product.current_price || product.starting_price,
-            base_price: product.current_price || product.starting_price,
+            pre_smart_pricing_price: variant.current_price || variant.starting_price,
+            base_price: variant.current_price || variant.starting_price,
           })
           .select()
           .single();
 
         if (createError) {
-          errors.push(`${product.title}: Failed to create pricing config - ${createError.message}`);
+          errors.push(`${variant.title}: Failed to create pricing config - ${createError.message}`);
           continue;
         }
 
@@ -130,27 +142,27 @@ export async function runPricingAlgorithm(storeId: string, shopDomain: string, a
 
       // Only process if config exists and auto_pricing_enabled is true
       if (config && config.auto_pricing_enabled) {
-        productsToProcess.push({ product: product as ProductRow, config });
+        variantsToProcess.push({ variant: variant as VariantRow, config });
       }
     }
 
-    console.log('🔵 PRICING ALGORITHM: Products to process:', productsToProcess.length);
+    console.log('🔵 PRICING ALGORITHM: Variants to process:', variantsToProcess.length);
 
-    if (productsToProcess.length === 0) {
-      console.log('🔵 PRICING ALGORITHM: No products with autopilot enabled');
-      return { success: true, stats, errors: ['No products with autopilot enabled'] };
+    if (variantsToProcess.length === 0) {
+      console.log('🔵 PRICING ALGORITHM: No variants with autopilot enabled');
+      return { success: true, stats, errors: ['No variants with autopilot enabled'] };
     }
 
-    // Process each product
-    for (const { product, config } of productsToProcess) {
+    // Process each variant
+    for (const { variant, config } of variantsToProcess) {
       stats.processed++;
-      console.log(`🔵 PRICING ALGORITHM: Processing product ${stats.processed}/${productsToProcess.length}:`, product.title);
+      console.log(`🔵 PRICING ALGORITHM: Processing variant ${stats.processed}/${variantsToProcess.length}:`, variant.title);
       
       try {
-        await processProduct(product, config, stats, shopDomain, accessToken, storeId);
+        await processVariant(variant, config, stats, shopDomain, accessToken, storeId);
       } catch (error) {
-        const errorMsg = `${product.title}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        console.error('🔵 PRICING ALGORITHM: Error processing product:', errorMsg);
+        const errorMsg = `${variant.title}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error('🔵 PRICING ALGORITHM: Error processing variant:', errorMsg);
         errors.push(errorMsg);
       }
     }
@@ -185,9 +197,9 @@ export async function runPricingAlgorithm(storeId: string, shopDomain: string, a
 }
 
 /**
- * Process a single product
+ * Process a single variant
  */
-async function processProduct(product: ProductRow, config: PricingConfig, stats: AlgorithmStats, shopDomain: string, accessToken: string, storeId: string) {
+async function processVariant(variant: VariantRow, config: PricingConfig, stats: AlgorithmStats, shopDomain: string, accessToken: string, storeId: string) {
   const now = new Date();
 
   // Step 1: Check if waiting after revert
@@ -214,25 +226,25 @@ async function processProduct(product: ProductRow, config: PricingConfig, stats:
 
   // Step 4: Get revenue data
   const periodHours = config.period_hours ?? 24;
-  const revenue = await getRevenue(product.id, periodHours);
+  const revenue = await getRevenue(variant.id, periodHours);
 
   // Step 5: Decide what to do
   if (!revenue.hasSufficientData) {
     // First increase - no data yet
-    await increasePrice(product, config, stats, {} as RevenueData, shopDomain, accessToken, storeId);
+    await increasePrice(variant, config, stats, {} as RevenueData, shopDomain, accessToken, storeId);
   } else if (revenue.changePercent < -(config.revenue_drop_threshold || 1.0)) {
     // Revenue dropped - revert
-    await revertPrice(product, config, stats, revenue, shopDomain, accessToken, storeId);
+    await revertPrice(variant, config, stats, revenue, shopDomain, accessToken, storeId);
   } else {
     // Revenue stable/up - increase
-    await increasePrice(product, config, stats, revenue, shopDomain, accessToken, storeId);
+    await increasePrice(variant, config, stats, revenue, shopDomain, accessToken, storeId);
   }
 }
 
 /**
  * Get revenue comparison
  */
-async function getRevenue(productId: string, periodHours: number) {
+async function getRevenue(variantId: string, periodHours: number) {
   const supabaseAdmin = createAdminClient();
   const now = new Date();
   const currentStart = new Date(now.getTime() - periodHours * 60 * 60 * 1000);
@@ -241,13 +253,13 @@ async function getRevenue(productId: string, periodHours: number) {
   const { data: currentData } = await supabaseAdmin
     .from('sales_data')
     .select('revenue')
-    .eq('product_id', productId)
+    .eq('variant_id', variantId)
     .gte('date', currentStart.toISOString().split('T')[0]);
 
   const { data: previousData } = await supabaseAdmin
     .from('sales_data')
     .select('revenue')
-    .eq('product_id', productId)
+    .eq('variant_id', variantId)
     .gte('date', previousStart.toISOString().split('T')[0])
     .lt('date', currentStart.toISOString().split('T')[0]);
 
@@ -263,46 +275,46 @@ async function getRevenue(productId: string, periodHours: number) {
 /**
  * Increase price
  */
-async function increasePrice(product: ProductRow, config: PricingConfig, stats: AlgorithmStats, revenue: RevenueData | null, shopDomain: string, accessToken: string, storeId: string) {
+async function increasePrice(variant: VariantRow, config: PricingConfig, stats: AlgorithmStats, revenue: RevenueData | null, shopDomain: string, accessToken: string, storeId: string) {
   const supabaseAdmin = createAdminClient();
-  const newPrice = product.current_price * (1 + (config.increment_percentage || 5.0) / 100);
-  const percentIncrease = ((newPrice - product.starting_price) / product.starting_price) * 100;
+  const newPrice = variant.current_price * (1 + (config.increment_percentage || 5.0) / 100);
+  const percentIncrease = ((newPrice - variant.starting_price) / variant.starting_price) * 100;
 
   // Check max cap
   if (percentIncrease > (config.max_increase_percentage || 100.0)) {
-    const maxPrice = product.starting_price * (1 + (config.max_increase_percentage || 100.0) / 100);
-    await updatePrice(product, config, maxPrice, 'increase', 'Hit max cap', revenue, shopDomain, accessToken, storeId);
+    const maxPrice = variant.starting_price * (1 + (config.max_increase_percentage || 100.0) / 100);
+    await updatePrice(variant, config, maxPrice, 'increase', 'Hit max cap', revenue, shopDomain, accessToken, storeId);
     await supabaseAdmin
       .from('pricing_config')
       .update({ current_state: 'at_max_cap' })
-      .eq('product_id', product.id);
+      .eq('variant_id', variant.id);
     stats.increased++;
     return;
   }
 
-  await updatePrice(product, config, newPrice, 'increase', revenue ? `Revenue ${(revenue as Record<string, unknown>).changePercent >= 0 ? 'up' : 'stable'}` : 'First increase', revenue, shopDomain, accessToken, storeId);
+  await updatePrice(variant, config, newPrice, 'increase', revenue ? `Revenue ${(revenue as Record<string, unknown>).changePercent >= 0 ? 'up' : 'stable'}` : 'First increase', revenue, shopDomain, accessToken, storeId);
   stats.increased++;
 }
 
 /**
  * Revert price
  */
-async function revertPrice(product: ProductRow, config: PricingConfig, stats: AlgorithmStats, revenue: RevenueData, shopDomain: string, accessToken: string, storeId: string) {
+async function revertPrice(variant: VariantRow, config: PricingConfig, stats: AlgorithmStats, revenue: RevenueData, shopDomain: string, accessToken: string, storeId: string) {
   const supabaseAdmin = createAdminClient();
   
   // Get previous price from history
   const { data: history } = await supabaseAdmin
     .from('pricing_history')
     .select('old_price')
-    .eq('product_id', product.id)
+    .eq('variant_id', variant.id)
     .eq('action', 'increase')
     .order('timestamp', { ascending: false })
     .limit(1)
     .single();
 
-  const previousPrice = history?.old_price || product.starting_price;
+  const previousPrice = history?.old_price || variant.starting_price;
 
-  await updatePrice(product, config, previousPrice, 'revert', `Revenue dropped ${(revenue as Record<string, unknown>).changePercent.toFixed(1)}%`, revenue, shopDomain, accessToken, storeId);
+  await updatePrice(variant, config, previousPrice, 'revert', `Revenue dropped ${(revenue as Record<string, unknown>).changePercent.toFixed(1)}%`, revenue, shopDomain, accessToken, storeId);
 
   // Set waiting state (updatePrice already set next_price_change_date)
   const waitUntil = new Date();
@@ -314,7 +326,7 @@ async function revertPrice(product: ProductRow, config: PricingConfig, stats: Al
       revert_wait_until_date: waitUntil.toISOString(),
       next_price_change_date: waitUntil.toISOString(), // Wait until this date
     })
-    .eq('product_id', product.id);
+    .eq('variant_id', variant.id);
 
   stats.reverted++;
 }
@@ -322,17 +334,17 @@ async function revertPrice(product: ProductRow, config: PricingConfig, stats: Al
 /**
  * Update price in Shopify and database
  */
-async function updatePrice(product: ProductRow, config: PricingConfig, newPrice: number, action: string, reason: string, revenue: RevenueData | null, shopDomain: string, accessToken: string, storeId: string) {
+async function updatePrice(variant: VariantRow, config: PricingConfig, newPrice: number, action: string, reason: string, revenue: RevenueData | null, shopDomain: string, accessToken: string, storeId: string) {
   const supabaseAdmin = createAdminClient();
   
   // Update Shopify
-  await updateShopifyPrice(product.shopify_id, newPrice, shopDomain, accessToken);
+  await updateShopifyPrice(variant.shopify_id, newPrice, shopDomain, accessToken);
 
   // Update database
   await supabaseAdmin
-    .from('products')
+    .from('product_variants')
     .update({ current_price: newPrice })
-    .eq('id', product.id);
+    .eq('id', variant.id);
 
   const now = new Date();
   const nextChange = new Date(now.getTime() + (config.period_hours || 24) * 60 * 60 * 1000);
@@ -343,13 +355,15 @@ async function updatePrice(product: ProductRow, config: PricingConfig, newPrice:
       last_price_change_date: now.toISOString(),
       next_price_change_date: nextChange.toISOString(),
       current_state: action === 'revert' ? 'waiting_after_revert' : 'increasing',
+      last_smart_pricing_price: variant.current_price,  // Save OLD price before increase
     })
-    .eq('product_id', product.id);
+    .eq('variant_id', variant.id);
 
   // Log to history
   await supabaseAdmin.from('pricing_history').insert({
-    product_id: product.id,
-    old_price: product.current_price,
+    variant_id: variant.id,
+    product_id: variant.product_id,
+    old_price: variant.current_price,
     new_price: newPrice,
     action,
     reason,
