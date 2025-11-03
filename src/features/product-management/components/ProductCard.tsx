@@ -82,16 +82,8 @@ export function ProductCard({
   
   // Sync local state with prop changes
   useEffect(() => {
-    console.log(`🎨 [${product.title}] ProductCard - smartPricingEnabled prop changed to:`, smartPricingEnabled);
     setLocalEnabled(smartPricingEnabled);
-  }, [smartPricingEnabled, product.title]);
-  
-  // Log product ID when component mounts or changes
-  useEffect(() => {
-    console.log(`🎴 ProductCard "${product.title}" - product.id:`, product.id);
-    console.log(`🎴 ProductCard "${product.title}" - product.id type:`, typeof product.id);
-    console.log(`🎴 ProductCard "${product.title}" - product.id length:`, product.id?.length);
-  }, [product.id, product.title]);
+  }, [smartPricingEnabled]);
   
   // Use smart pricing toggle hook
   const {
@@ -283,16 +275,27 @@ export function ProductCard({
     }
   };
 
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Open analytics panel
+    if (onViewAnalytics) {
+      onViewAnalytics(product.id);
+    }
+  };
+
   return (
-    <Card className={`group relative overflow-hidden transition-all aspect-square ${
-      isSelected
-        ? 'border-4 border-primary shadow-2xl opacity-100' 
-        : isShowingVariants 
-        ? 'shadow-2xl border-2 border-primary z-50 scale-105' 
-        : hasAnySelection
-        ? 'opacity-40 hover:opacity-60 border-2 hover:border-primary/40'
-        : 'hover:shadow-lg border-2 hover:border-primary/40 hover:shadow-primary/10'
-    }`}>
+    <Card 
+      data-product-id={product.id}
+      className={`group relative overflow-hidden transition-all aspect-square cursor-pointer hover:scale-[1.02] ${
+        isSelected
+          ? 'border-4 border-primary shadow-2xl opacity-100' 
+          : isShowingVariants 
+          ? 'shadow-2xl border-2 border-primary z-50 scale-105' 
+          : hasAnySelection
+          ? 'opacity-40 hover:opacity-60 border-2 hover:border-primary/40'
+          : 'hover:shadow-lg border-2 hover:border-primary/40 hover:shadow-primary/10'
+      }`}
+    >
+      
       {/* Full Background Image */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         {testBackgroundColor ? (
@@ -317,8 +320,10 @@ export function ProductCard({
         )}
       </div>
 
-      {/* Content Overlay */}
-      <div className="relative z-10 h-full flex flex-col p-3 pointer-events-none">
+      {/* Content Overlay - visual content only */}
+      <div 
+        className="absolute inset-0 z-10 pointer-events-none flex flex-col p-3"
+      >
         {/* Top Section - Title */}
         <div className="flex-shrink-0">
           <div className="p-2 pl-10">
@@ -329,9 +334,8 @@ export function ProductCard({
         {/* Spacer to push content to bottom */}
         <div className="flex-1" />
 
-        {/* Bottom Section - Price & Actions */}
-        <div className="flex-shrink-0 space-y-3 pb-2">
-          {/* Price */}
+        {/* Bottom Section - Price */}
+        <div className="flex-shrink-0 pb-20">
           <div className="p-3">
             <div className="text-center">
               <div className="text-2xl font-bold text-white" style={{ textShadow: '0 2px 6px rgba(0,0,0,0.9), 0 0 3px rgba(0,0,0,0.9)' }}>
@@ -339,64 +343,82 @@ export function ProductCard({
               </div>
             </div>
           </div>
-
-          {/* Buttons */}
-          <div className="space-y-1.5 pointer-events-auto">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                console.log(`🖱️ [${product.title}] Button clicked - localEnabled:`, localEnabled);
-                handleToggle(localEnabled);
-              }}
-              disabled={isTogglingSmartPricing}
-              className={`relative w-full px-3 py-1.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-md shadow-lg ${
-                localEnabled 
-                  ? 'bg-white/90 hover:bg-white text-gray-900 animate-pulse-subtle' 
-                  : 'bg-black/60 hover:bg-black/70 text-white'
-              }`}
-            >
-              {/* Active glow effect */}
-              {localEnabled && (
-                <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-blue-500/20 animate-glow-pulse" />
-              )}
-              <Zap className={`h-3.5 w-3.5 relative z-10 ${
-                localEnabled 
-                  ? 'text-primary animate-pulse' 
-                  : 'text-white'
-              }`} />
-              <span className="text-xs relative z-10">
-                {isTogglingSmartPricing 
-                  ? 'Updating...' 
-                  : localEnabled ? 'Smart Pricing Active' : 'Smart Pricing Off'}
-              </span>
-            </button>
-            
-            {/* Analytics Button */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                console.log('🚀 View Analytics clicked for product ID:', product.id);
-                console.log('🚀 onViewAnalytics function exists?', !!onViewAnalytics);
-                if (onViewAnalytics) {
-                  onViewAnalytics(product.id);
-                } else {
-                  console.error('❌ onViewAnalytics is not defined');
-                }
-              }}
-              className="w-full px-3 py-1.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold bg-black/60 hover:bg-black/70 text-white backdrop-blur-md shadow-lg"
-            >
-              <span className="text-xs">📊 View Analytics</span>
-            </button>
-          </div>
         </div>
+      </div>
+
+      {/* Clickable Overlay - z-20, sits between content (z-10) and buttons (z-30) */}
+      <div 
+        className="absolute inset-0 z-20 cursor-pointer"
+        style={{ pointerEvents: 'auto' }}
+        onClick={(e) => {
+          // Ignore clicks on interactive elements (button or checkbox)
+          const target = e.target as HTMLElement;
+          const clickedButton = target.closest('button');
+          const clickedCheckbox = target.closest('[data-checkbox]');
+          
+          if (clickedButton || clickedCheckbox) {
+            return;
+          }
+          
+          // Open analytics panel
+          handleCardClick(e);
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Buttons - positioned absolutely to be above click overlay */}
+      <div 
+        className="absolute bottom-3 left-3 right-3 z-30 space-y-1.5"
+        style={{ pointerEvents: 'auto' }}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+        }}
+      >
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleToggle(localEnabled);
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          disabled={isTogglingSmartPricing}
+          className={`relative w-full px-3 py-1.5 rounded-lg flex items-center justify-center gap-2 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-md shadow-lg ${
+            localEnabled 
+              ? 'bg-white/90 hover:bg-white text-gray-900 animate-pulse-subtle' 
+              : 'bg-black/60 hover:bg-black/70 text-white'
+          }`}
+        >
+          {/* Active glow effect */}
+          {localEnabled && (
+            <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/20 to-blue-500/20 animate-glow-pulse" />
+          )}
+          <Zap className={`h-3.5 w-3.5 relative z-10 ${
+            localEnabled 
+              ? 'text-primary animate-pulse' 
+              : 'text-white'
+          }`} />
+          <span className="text-xs relative z-10">
+            {isTogglingSmartPricing 
+              ? 'Updating...' 
+              : localEnabled ? 'Smart Pricing Active' : 'Smart Pricing Off'}
+          </span>
+        </button>
       </div>
 
       {/* Checkbox - Top Left */}
       <div 
         className="absolute left-3 top-3 z-50"
+        data-checkbox="true"
+        style={{ pointerEvents: 'auto', cursor: 'pointer' }}
         onClick={(e) => {
           e.stopPropagation();
+          e.preventDefault();
           onSelect(product.id);
+        }}
+        onMouseDown={(e) => {
+          e.stopPropagation();
         }}
       >
         <div className={`h-5 w-5 rounded border-2 flex items-center justify-center cursor-pointer transition-all ${
@@ -522,7 +544,6 @@ export function ProductCard({
         onConfirm={async () => {
           const result = await handleConfirmToggle();
           // Update local state immediately for instant UI feedback
-          console.log(`✨ [${product.title}] Confirm disable - updating localEnabled to FALSE`);
           setLocalEnabled(false);
           // Update parent state with new price immediately for smooth UX
           if (result?.revertedTo !== undefined) {
@@ -540,7 +561,6 @@ export function ProductCard({
         onConfirm={async (option) => {
           const result = await handleResumeConfirm(option);
           // Update local state immediately for instant UI feedback
-          console.log(`✨ [${product.title}] Resume confirmed - updating localEnabled to TRUE`);
           setLocalEnabled(true);
           // Update parent state with new price immediately for smooth UX
           if (result?.price !== undefined) {
