@@ -1,9 +1,17 @@
-// Resume smart pricing with user's choice
+// Resume smart pricing with user's choice - operates on all variants
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/shared/lib/supabase';
+import {
+  resumeVariantSmartPricing,
+} from '@/features/pricing-engine/services/smartPricingService';
+import {
+  getVariantsByProductId,
+  getVariantConfig,
+} from '@/shared/lib/variantHelpers';
 
 export async function POST(request: NextRequest) {
   try {
+    const supabaseAdmin = createAdminClient();
     const body = await request.json();
     const { productId, resumeOption } = body;
 
@@ -21,78 +29,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Try to find product by UUID first, then by Shopify ID
-    let product: { id: string; shopify_id: string; title: string; pricing_config?: { id: string } } | null = null;
-    let productError: Error | null = null;
-    
-    // First try as UUID
-    const uuidResult = await supabaseAdmin
-      .from('products')
-      .select('*, pricing_config(*)')
-      .eq('id', productId)
-      .single();
-    
-    if (!uuidResult.error && uuidResult.data) {
-      product = uuidResult.data;
-    } else {
-      // Try as Shopify ID
-      const shopifyResult = await supabaseAdmin
-        .from('products')
-        .select('*, pricing_config(*)')
-        .eq('shopify_id', productId)
-        .single();
-      
-      if (!shopifyResult.error && shopifyResult.data) {
-        product = shopifyResult.data;
-      } else {
-        productError = shopifyResult.error;
-      }
-    }
+    // Get all variants for this product
+    const variants = await getVariantsByProductId(productId);
 
-    if (productError || !product) {
+    if (variants.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Product not found' },
+        { success: false, error: 'No variants found for this product' },
         { status: 404 }
       );
     }
 
-    const config = Array.isArray(product.pricing_config)
-      ? product.pricing_config[0]
-      : product.pricing_config;
+    // Process all variants
+    const results = await Promise.all(
+      variants.map(async (variant) => {
+        const config = await getVariantConfig(variant.id);
 
-    // Determine price based on choice
-    const newPrice = resumeOption === 'base'
-      ? config.pre_smart_pricing_price || product.starting_price
-      : config.last_smart_pricing_price || product.current_price;
+        const { resumedTo } = await resumeVariantSmartPricing(
+          supabaseAdmin,
+          {
+            id: variant.id,
+            product_id: variant.product_id,
+            store_id: variant.store_id,
+            shopify_id: variant.shopify_id,
+            shopify_product_id: variant.shopify_product_id,
+            title: variant.title,
+            current_price: variant.current_price,
+            starting_price: variant.starting_price,
+          },
+          config,
+          resumeOption
+        );
 
-    // Update pricing config
-    await supabaseAdmin
-      .from('pricing_config')
-      .update({
-        auto_pricing_enabled: true,
-        current_state: 'increasing',
-        revert_wait_until_date: null,
+        return {
+          variantId: variant.id,
+          variantTitle: variant.title,
+          price: resumedTo,
+        };
       })
-      .eq('product_id', product.id);
-
-    // Update product price
-    await supabaseAdmin
-      .from('products')
-      .update({ current_price: newPrice })
-      .eq('id', productId);
-
-    // Update Shopify
-    await updateShopifyPrice(product.shopify_id, newPrice);
+    );
 
     return NextResponse.json({
       success: true,
-      price: newPrice,
+      variantsResumed: results.length,
       resumeOption,
-      snapshot: {
-        productId,
-        price: product.current_price,
-        auto_pricing_enabled: false,
-      },
+      results,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -101,44 +81,5 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-async function updateShopifyPrice(shopifyId: string, newPrice: number) {
-  const storeUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL;
-  const accessToken = process.env.NEXT_PUBLIC_SHOPIFY_ACCESS_TOKEN;
-  const apiVersion = process.env.NEXT_PUBLIC_SHOPIFY_API_VERSION || '2024-10';
-
-  if (!storeUrl || !accessToken) throw new Error('Missing Shopify credentials');
-
-  const baseUrl = `https://${storeUrl}/admin/api/${apiVersion}`;
-
-  const productRes = await fetch(`${baseUrl}/products/${shopifyId}.json`, {
-    headers: { 'X-Shopify-Access-Token': accessToken },
-    cache: 'no-store',
-  });
-
-  if (!productRes.ok) throw new Error(`Failed to fetch product`);
-
-  const productData = await productRes.json();
-  const variantId = productData.product?.variants?.[0]?.id;
-
-  if (!variantId) throw new Error('No variant found');
-
-  const updateRes = await fetch(`${baseUrl}/variants/${variantId}.json`, {
-    method: 'PUT',
-    headers: {
-      'X-Shopify-Access-Token': accessToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      variant: {
-        id: variantId,
-        price: newPrice.toFixed(2),
-        compare_at_price: null,
-      },
-    }),
-  });
-
-  if (!updateRes.ok) throw new Error(`Failed to update price`);
 }
 

@@ -47,7 +47,7 @@ export async function syncProductsFromShopify(
 
     // Initialize Shopify client
     const shopifyClient = new ShopifyClient({
-      storeUrl: `https://${shopDomain}`,
+      storeUrl: shopDomain,
       accessToken,
     });
 
@@ -169,22 +169,28 @@ async function processProductBatch(storeId: string, products: ShopifyProduct[]):
   }
 
   // Process variants for each product
+  // CRITICAL: Every Shopify product has at least one variant
+  // Every priced item = one variant entity (simple model)
   for (const product of products) {
-    if (product.variants && product.variants.length > 0) {
-      // First, get the internal database ID for this product
-      const { data: dbProduct } = await supabase
-        .from('products')
-        .select('id')
-        .eq('store_id', storeId)
-        .eq('shopify_id', product.id)
-        .single();
-      
-      if (dbProduct) {
-        // Use the internal database UUID
-        await processProductVariants(storeId, dbProduct.id, product.variants, product.id);
-      } else {
-        console.error(`❌ Could not find internal ID for product with shopify_id: ${product.id}`);
-      }
+    if (!product.variants || product.variants.length === 0) {
+      console.warn(`⚠️ Product ${product.id} (${product.title}) has no variants - skipping`);
+      continue;
+    }
+
+    // First, get the internal database ID for this product
+    const { data: dbProduct } = await supabase
+      .from('products')
+      .select('id')
+      .eq('store_id', storeId)
+      .eq('shopify_id', product.id)
+      .single();
+    
+    if (dbProduct) {
+      // Use the internal database UUID
+      // Process ALL variants - each one is an independent priced entity
+      await processProductVariants(storeId, dbProduct.id, product.variants, product.id);
+    } else {
+      console.error(`❌ Could not find internal ID for product with shopify_id: ${product.id}`);
     }
   }
 }
@@ -202,17 +208,60 @@ async function processProductVariants(
   
   console.log(`🔄 Processing variants for product shopify_id: ${shopifyProductId}, db_id: ${productDbId}`);
 
+  // CRITICAL: Query existing variants with their pricing_config to check smart pricing status
+  // This prevents sync from overwriting prices when smart pricing is disabled
+  const { data: existingVariants } = await supabase
+    .from('product_variants')
+    .select(`
+      id,
+      shopify_id,
+      current_price,
+      pricing_config(
+        id,
+        auto_pricing_enabled,
+        pre_smart_pricing_price,
+        last_smart_pricing_price
+      )
+    `)
+    .eq('product_id', productDbId)
+    .in('shopify_id', variants.map(v => v.id));
+
+  // Create a Map to track which variants have smart pricing disabled
+  const smartPricingDisabled = new Map<string, boolean>();
+  existingVariants?.forEach((v: any) => {
+    const config = Array.isArray(v.pricing_config) 
+      ? v.pricing_config[0] 
+      : v.pricing_config;
+    const isDisabled = config?.auto_pricing_enabled === false;
+    smartPricingDisabled.set(v.shopify_id, isDisabled);
+    
+    if (isDisabled) {
+      console.log(`⚠️ Variant ${v.shopify_id} has smart pricing disabled - preserving database current_price during sync`);
+    }
+  });
+
   // Prepare variants for upsert
+  const variantPriceByShopifyId = new Map<string, number>();
+
   const variantsToUpsert = variants.map(variant => {
     const priceDecimal = parseFloat(variant.price);
-    return {
+    const normalizedPrice = Number.isFinite(priceDecimal) ? priceDecimal : 0;
+    variantPriceByShopifyId.set(variant.id, normalizedPrice);
+
+    const isSmartPricingDisabled = smartPricingDisabled.get(variant.id) === true;
+    
+    // Base data that's always synced
+    const baseData = {
       store_id: storeId,
       product_id: productDbId,  // Use internal database UUID
       shopify_id: variant.id,
+      shopify_product_id: shopifyProductId,
       title: variant.title,
       price: variant.price.toString(),
-      starting_price: priceDecimal,  // NEW: Set starting price
-      current_price: priceDecimal,   // NEW: Set current price
+      starting_price: normalizedPrice,
+      // CRITICAL: Only sync current_price if smart pricing is enabled
+      // When disabled, preserve the database value (which should be pre_smart_pricing_price)
+      ...(isSmartPricingDisabled ? {} : { current_price: normalizedPrice }),
       compare_at_price: variant.compareAtPrice?.toString() || null,
       sku: variant.sku || null,
       inventory_quantity: variant.inventoryQuantity || 0,
@@ -223,18 +272,81 @@ async function processProductVariants(
       updated_at: variant.updatedAt,
       is_active: true,
     };
+    
+    return baseData;
   });
 
   // Upsert variants
-  const { error: variantsError } = await supabase
+  const { data: upsertedVariants, error: variantsError } = await supabase
     .from('product_variants')
     .upsert(variantsToUpsert, {
       onConflict: 'store_id,product_id,shopify_id',
       ignoreDuplicates: false,
-    });
+    })
+    .select('id, shopify_id, shopify_product_id, starting_price, current_price');
 
   if (variantsError) {
     throw new Error(`Failed to upsert variants: ${variantsError.message}`);
+  }
+
+  if (upsertedVariants?.some((variant) => !variant.shopify_product_id)) {
+    console.warn(
+      '⚠️ SyncProducts: Missing shopify_product_id after upsert. Check schema migration.',
+      {
+        storeId,
+        productDbId,
+        shopifyProductId,
+      }
+    );
+  }
+
+  if (upsertedVariants && upsertedVariants.length > 0) {
+    const variantIds = upsertedVariants.map((variant) => variant.id);
+
+    const { data: existingConfigs, error: configsFetchError } = await supabase
+      .from('pricing_config')
+      .select('variant_id')
+      .in('variant_id', variantIds);
+
+    if (configsFetchError) {
+      throw new Error(`Failed to fetch pricing configs: ${configsFetchError.message}`);
+    }
+
+    const configVariantIds = new Set(
+      (existingConfigs || []).map((config) => config.variant_id)
+    );
+
+    const configsToInsert = upsertedVariants
+      .filter((variant) => !configVariantIds.has(variant.id))
+      .map((variant) => {
+        const baseline =
+          variant.current_price ??
+          variant.starting_price ??
+          variantPriceByShopifyId.get(variant.shopify_id) ??
+          0;
+
+        return {
+          variant_id: variant.id,
+          auto_pricing_enabled: false,
+          pre_smart_pricing_price: baseline,
+          last_smart_pricing_price: null,
+          current_state: 'increasing',
+          next_price_change_date: null,
+          revert_wait_until_date: null,
+        };
+      });
+
+    if (configsToInsert.length > 0) {
+      const { error: insertConfigError } = await supabase
+        .from('pricing_config')
+        .insert(configsToInsert);
+
+      if (insertConfigError) {
+        throw new Error(
+          `Failed to insert default pricing configs: ${insertConfigError.message}`
+        );
+      }
+    }
   }
 }
 
