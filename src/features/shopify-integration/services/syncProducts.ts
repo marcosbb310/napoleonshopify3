@@ -2,13 +2,16 @@ import { createAdminClient } from '@/shared/lib/supabase';
 import { ShopifyClient } from './shopifyClient';
 import { getDecryptedTokens } from '@/features/shopify-oauth/services/tokenService';
 import type { ShopifyProduct } from '../types';
+import { normalizeShopifyId } from '@/shared/utils/shopifyIdNormalizer';
 
 export interface SyncResult {
   success: boolean;
   totalProducts: number;
   syncedProducts: number;
+  skippedProducts: number;  // Products skipped due to invalid IDs
   errors: string[];
   duration: number;
+  invalidProducts?: Array<{ title: string; reason: string; rawId: unknown }>;  // Details about skipped products
 }
 
 export interface SyncProgress {
@@ -38,6 +41,8 @@ export async function syncProductsFromShopify(
   const errors: string[] = [];
   let totalProducts = 0;
   let syncedProducts = 0;
+  let skippedProducts = 0;
+  const invalidProducts: Array<{ title: string; reason: string; rawId: unknown }> = [];
 
   try {
     console.log('🔄 Starting product sync for store:', storeId);
@@ -84,13 +89,14 @@ export async function syncProductsFromShopify(
       const batch = batches[batchIndex];
       
       try {
-        await processProductBatch(storeId, batch);
-        syncedProducts += batch.length;
+        const processedCount = await processProductBatch(storeId, batch, invalidProducts);
+        syncedProducts += processedCount;
+        skippedProducts += (batch.length - processedCount);
         
         // Update progress
         await updateSyncStatus(storeId, 'in_progress', totalProducts, syncedProducts);
         
-        console.log(`✅ Processed batch ${batchIndex + 1}/${batches.length} (${syncedProducts}/${totalProducts} products)`);
+        console.log(`✅ Processed batch ${batchIndex + 1}/${batches.length} (${syncedProducts}/${totalProducts} products, ${skippedProducts} skipped)`);
       } catch (error) {
         const errorMsg = `Batch ${batchIndex + 1} failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
         errors.push(errorMsg);
@@ -99,6 +105,11 @@ export async function syncProductsFromShopify(
         // Continue with next batch
         continue;
       }
+    }
+
+    // Log invalid products summary
+    if (invalidProducts.length > 0) {
+      console.error(`❌ SyncProducts: Total of ${invalidProducts.length} product(s) skipped due to invalid IDs`);
     }
 
     const duration = Date.now() - startTime;
@@ -112,8 +123,10 @@ export async function syncProductsFromShopify(
       success: errors.length === 0,
       totalProducts,
       syncedProducts,
+      skippedProducts,
       errors,
       duration,
+      invalidProducts: invalidProducts.length > 0 ? invalidProducts : undefined,
     };
 
   } catch (error) {
@@ -129,8 +142,10 @@ export async function syncProductsFromShopify(
       success: false,
       totalProducts,
       syncedProducts,
+      skippedProducts,
       errors: [...errors, errorMessage],
       duration,
+      invalidProducts: invalidProducts.length > 0 ? invalidProducts : undefined,
     };
   }
 }
@@ -138,40 +153,134 @@ export async function syncProductsFromShopify(
 /**
  * Process a batch of products and store them in the database
  */
-async function processProductBatch(storeId: string, products: ShopifyProduct[]): Promise<void> {
+async function processProductBatch(
+  storeId: string, 
+  products: ShopifyProduct[],
+  invalidProductsTracker: Array<{ title: string; reason: string; rawId: unknown }>
+): Promise<number> {
   const supabase = createAdminClient();
 
-  // Prepare products for upsert
-  const productsToUpsert = products.map(product => ({
-    store_id: storeId,
-    shopify_id: product.id,
-    title: product.title,
-    handle: product.handle,
-    vendor: product.vendor,
-    product_type: product.productType,
-    tags: product.tags || [],
-    status: product.status,
-    created_at: product.createdAt,
-    updated_at: product.updatedAt,
-    is_active: true,
-  }));
+  // Validate and filter products BEFORE mapping
+  const validProducts: ShopifyProduct[] = [];
+  
+  for (const product of products) {
+    const normalizedId = normalizeShopifyId(product.id);
+    
+    if (!normalizedId) {
+      invalidProductsTracker.push({
+        title: product.title || 'Unknown',
+        reason: 'Missing or invalid ID after normalization',
+        rawId: product.id,
+      });
+      continue;
+    }
+    
+    // Update product.id with normalized ID
+    product.id = normalizedId;
+    validProducts.push(product);
+  }
+
+  if (validProducts.length < products.length) {
+    const skippedCount = products.length - validProducts.length;
+    console.warn(`⚠️ SyncProducts: Skipped ${skippedCount} product(s) with invalid IDs in batch`);
+  }
+
+  if (validProducts.length === 0) {
+    // No valid products in this batch
+    return 0;
+  }
+
+  // Prepare products for upsert (now guaranteed to have valid shopify_id)
+  const productsToUpsert = validProducts.map(product => {
+    // Log image data for debugging
+    if (validProducts.indexOf(product) < 3) { // Log first 3 products
+      console.log(`🖼️  SyncProducts: Product "${product.title}" images:`, {
+        hasImages: !!product.images,
+        imageCount: product.images?.length || 0,
+        firstImageSrc: product.images?.[0]?.src || 'none',
+        images: product.images
+      });
+    }
+    
+    return {
+      store_id: storeId,
+      shopify_id: product.id,  // ✅ Now guaranteed to be valid, normalized string
+      title: product.title,
+      handle: product.handle,
+      vendor: product.vendor,
+      product_type: product.productType,
+      tags: product.tags || [],
+      status: product.status,
+      images: product.images || [], // ✅ Save product-level images
+      created_at: product.createdAt,
+      updated_at: product.updatedAt,
+      is_active: true,
+    };
+  });
+  
+  // Log sample of what we're about to upsert
+  if (productsToUpsert.length > 0) {
+    console.log(`🔄 SyncProducts: About to upsert ${productsToUpsert.length} products`);
+    console.log(`🖼️  SyncProducts: First product images in upsert:`, productsToUpsert[0].images);
+  }
 
   // Upsert products
-  const { error: productsError } = await supabase
+  const { data: upsertedProducts, error: productsError } = await supabase
     .from('products')
     .upsert(productsToUpsert, {
       onConflict: 'store_id,shopify_id',
       ignoreDuplicates: false,
-    });
+    })
+    .select('id, title, shopify_id, images');
 
   if (productsError) {
+    console.error(`❌ SyncProducts: Upsert failed:`, productsError);
     throw new Error(`Failed to upsert products: ${productsError.message}`);
   }
 
-  // Process variants for each product
+  // Verify duplicate prevention (4.7)
+  if (upsertedProducts && upsertedProducts.length > 0) {
+    const uniqueIds = new Set(upsertedProducts.map(p => p.shopify_id));
+    if (uniqueIds.size !== upsertedProducts.length) {
+      console.error('❌ DUPLICATE WARNING: Upsert returned duplicate shopify_ids!');
+      console.error('❌ Expected unique count:', uniqueIds.size, 'Got:', upsertedProducts.length);
+      console.error('❌ Duplicate shopify_ids:', 
+        upsertedProducts
+          .map(p => p.shopify_id)
+          .filter((id, index, arr) => arr.indexOf(id) !== index)
+      );
+    } else {
+      console.log('✅ Duplicate prevention verified: All shopify_ids are unique');
+    }
+  }
+
+  // Verify images were saved correctly
+  if (upsertedProducts && upsertedProducts.length > 0) {
+    const productsWithImages = upsertedProducts.filter(p => {
+      const images = p.images;
+      // Check if images exist and is a valid array with at least one image
+      return images && Array.isArray(images) && images.length > 0;
+    });
+    console.log(`✅ SyncProducts: Upserted ${upsertedProducts.length} products`);
+    console.log(`🖼️  SyncProducts: Products with images after upsert: ${productsWithImages.length}/${upsertedProducts.length}`);
+    
+    if (productsWithImages.length > 0) {
+      console.log(`🖼️  SyncProducts: Sample product with images:`, {
+        title: productsWithImages[0].title,
+        imageCount: productsWithImages[0].images.length,
+        firstImage: productsWithImages[0].images[0]
+      });
+    } else if (upsertedProducts.length > 0) {
+      console.log(`⚠️  SyncProducts: No products have images after upsert!`);
+      console.log(`🖼️  SyncProducts: Sample product images:`, upsertedProducts[0].images);
+      console.log(`🖼️  SyncProducts: What we tried to save:`, productsToUpsert[0].images);
+    }
+  }
+
+  // Process variants for each valid product
   // CRITICAL: Every Shopify product has at least one variant
   // Every priced item = one variant entity (simple model)
-  for (const product of products) {
+  for (const product of validProducts) {
     if (!product.variants || product.variants.length === 0) {
       console.warn(`⚠️ Product ${product.id} (${product.title}) has no variants - skipping`);
       continue;
@@ -193,6 +302,8 @@ async function processProductBatch(storeId: string, products: ShopifyProduct[]):
       console.error(`❌ Could not find internal ID for product with shopify_id: ${product.id}`);
     }
   }
+
+  return validProducts.length; // Return count of successfully processed products
 }
 
 /**

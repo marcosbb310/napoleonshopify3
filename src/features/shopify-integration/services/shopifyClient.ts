@@ -5,6 +5,7 @@ import type {
   ShopifyApiResponse 
 } from '../types';
 import { shopifyRateLimiter } from '@/shared/lib/rateLimiter';
+import { normalizeShopifyId } from '@/shared/utils/shopifyIdNormalizer';
 
 export class ShopifyClient {
   private baseUrl: string;
@@ -75,48 +76,99 @@ export class ShopifyClient {
     }
 
     // Transform Shopify API response to our format
-    const transformedProducts: ShopifyProduct[] = response.data.products.map((product: Record<string, unknown>) => ({
-      id: product.id.toString(),
-      title: product.title,
-      handle: product.handle,
-      description: product.body_html || '',
-      vendor: product.vendor || '',
-      productType: product.product_type || '',
-      tags: product.tags ? product.tags.split(',').map((tag: string) => tag.trim()) : [],
-      status: product.status as 'active' | 'draft' | 'archived',
-      images: product.images?.map((image: Record<string, unknown>) => ({
-        id: image.id.toString(),
-        productId: product.id.toString(),
-        src: image.src,
-        alt: image.alt || '',
-        width: image.width || 800,
-        height: image.height || 800,
-      })) || [],
-      variants: product.variants?.map((variant: Record<string, unknown>) => ({
-        id: variant.id.toString(),
-        productId: product.id.toString(),
-        title: variant.title,
-        sku: variant.sku || '',
-        price: variant.price,
-        compareAtPrice: variant.compare_at_price,
-        inventoryQuantity: variant.inventory_quantity || 0,
-        inventoryManagement: variant.inventory_management,
-        weight: variant.weight,
-        weightUnit: variant.weight_unit as 'g' | 'kg' | 'oz' | 'lb',
-        image: variant.image ? {
-          id: variant.image.id.toString(),
-          productId: product.id.toString(),
-          src: variant.image.src,
-          alt: variant.image.alt || '',
-          width: variant.image.width || 800,
-          height: variant.image.height || 800,
-        } : undefined,
-        createdAt: variant.created_at,
-        updatedAt: variant.updated_at,
-      })) || [],
-      createdAt: product.created_at,
-      updatedAt: product.updated_at,
-    }));
+    // Filter out products with invalid IDs at API ingestion layer
+    const invalidProducts: Array<{ title: string; reason: string; rawId: unknown }> = [];
+    
+    const transformedProducts: ShopifyProduct[] = response.data.products
+      .map((product: Record<string, unknown>) => {
+        // Normalize product ID
+        const normalizedProductId = normalizeShopifyId(product.id);
+        
+        if (!normalizedProductId) {
+          invalidProducts.push({
+            title: (product.title as string) || 'Unknown',
+            reason: 'Missing or invalid product ID',
+            rawId: product.id,
+          });
+          return null; // Will be filtered out
+        }
+
+        // Normalize variant IDs
+        const normalizedVariants = product.variants?.map((variant: Record<string, unknown>) => {
+          const normalizedVariantId = normalizeShopifyId(variant.id);
+          if (!normalizedVariantId) {
+            console.warn(`⚠️ Skipping variant with invalid ID in product ${normalizedProductId}:`, variant);
+            return null;
+          }
+
+          return {
+            id: normalizedVariantId,
+            productId: normalizedProductId,
+            title: variant.title,
+            sku: variant.sku || '',
+            price: variant.price,
+            compareAtPrice: variant.compare_at_price,
+            inventoryQuantity: variant.inventory_quantity || 0,
+            inventoryManagement: variant.inventory_management,
+            weight: variant.weight,
+            weightUnit: variant.weight_unit as 'g' | 'kg' | 'oz' | 'lb',
+            image: variant.image ? {
+              id: normalizeShopifyId(variant.image.id) || '',
+              productId: normalizedProductId,
+              src: variant.image.src,
+              alt: variant.image.alt || '',
+              width: variant.image.width || 800,
+              height: variant.image.height || 800,
+            } : undefined,
+            createdAt: variant.created_at,
+            updatedAt: variant.updated_at,
+          };
+        }).filter((v): v is NonNullable<typeof v> => v !== null) || [];
+
+        const transformedImages = product.images?.map((image: Record<string, unknown>) => ({
+          id: normalizeShopifyId(image.id) || '',
+          productId: normalizedProductId,
+          src: image.src,
+          alt: image.alt || '',
+          width: image.width || 800,
+          height: image.height || 800,
+        })) || [];
+
+        // Log image data for first few products
+        if (transformedProducts.length < 3) {
+          console.log(`🖼️  ShopifyClient: Product "${product.title}" images from API:`, {
+            rawImagesCount: product.images?.length || 0,
+            transformedImagesCount: transformedImages.length,
+            firstImageSrc: transformedImages[0]?.src || 'none',
+            rawImages: product.images
+          });
+        }
+
+        return {
+          id: normalizedProductId,
+          title: product.title,
+          handle: product.handle,
+          description: product.body_html || '',
+          vendor: product.vendor || '',
+          productType: product.product_type || '',
+          tags: product.tags ? product.tags.split(',').map((tag: string) => tag.trim()) : [],
+          status: product.status as 'active' | 'draft' | 'archived',
+          images: transformedImages,
+          variants: normalizedVariants,
+          createdAt: product.created_at,
+          updatedAt: product.updated_at,
+        };
+      })
+      .filter((product): product is ShopifyProduct => product !== null);
+
+    // Log invalid products if any
+    if (invalidProducts.length > 0) {
+      console.error(`❌ ShopifyClient: Skipped ${invalidProducts.length} product(s) with invalid IDs:`, invalidProducts);
+    }
+
+    if (transformedProducts.length < response.data.products.length) {
+      console.warn(`⚠️ ShopifyClient: Filtered out ${response.data.products.length - transformedProducts.length} invalid product(s) from API response`);
+    }
 
     return {
       success: true,

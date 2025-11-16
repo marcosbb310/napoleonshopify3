@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireStore } from '@/shared/lib/apiAuth';
 import { createRouteHandlerClient } from '@/shared/lib/supabase';
 import { syncProductsFromShopify } from '@/features/shopify-integration/services/syncProducts';
 import { getDecryptedTokens } from '@/features/shopify-oauth/services/tokenService';
@@ -18,21 +19,7 @@ export async function POST(request: NextRequest) {
   try {
     console.log('🟢 SYNC API: Inside try block');
     
-    // Verify user is authenticated
-    const supabase = createRouteHandlerClient(request);
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (!user || authError) {
-      console.log('🟢 SYNC API: Auth check - Unauthenticated');
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-    
-    console.log('🟢 SYNC API: Auth check - Authenticated');
-
-    // Parse request body
+    // Parse request body to get storeId FIRST (before requireStore)
     const body = await request.json();
     console.log('🟢 SYNC API: Request body:', body);
     const { storeId } = body;
@@ -47,37 +34,25 @@ export async function POST(request: NextRequest) {
 
     console.log('🟢 SYNC API: Store ID:', storeId);
 
-    // Get store information
-    const { data: store, error: storeError } = await supabase
-      .from('stores')
-      .select('id, shop_domain, user_id')
-      .eq('id', storeId)
-      .eq('is_active', true)
-      .single();
+    // Use requireStore() helper with storeId from body (standardized auth pattern)
+    // Pass storeId directly in options to avoid body consumption issues
+    // Note: requireAuth() only needs headers, not body, so this should work
+    const { user, store, error: storeError } = await requireStore(request, { storeId });
+    
+    if (storeError) {
+      console.log('🟢 SYNC API: Store validation failed:', storeError);
+      return storeError;
+    }
 
-    if (storeError || !store) {
-      console.log('🟢 SYNC API: Store not found:', storeError);
+    if (!store) {
+      console.log('🟢 SYNC API: Store not found');
       return NextResponse.json(
-        { success: false, error: 'Store not found' },
+        { success: false, error: 'Store not found or access denied' },
         { status: 404 }
       );
     }
     
     console.log('🟢 SYNC API: Store found:', store.shop_domain);
-
-    // Verify store belongs to user
-    const { data: userProfile } = await supabase
-      .from('users')
-      .select('id')
-      .eq('auth_user_id', user.id)
-      .single();
-
-    if (!userProfile || store.user_id !== userProfile.id) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 403 }
-      );
-    }
 
     // Get decrypted access token
     console.log('🟢 SYNC API: Getting tokens...');
@@ -95,16 +70,39 @@ export async function POST(request: NextRequest) {
       success: result.success,
       totalProducts: result.totalProducts,
       syncedProducts: result.syncedProducts,
+      skippedProducts: result.skippedProducts,
       errors: result.errors.length
     });
+
+    // Get image stats from database after sync
+    const supabase = createRouteHandlerClient(request);
+    const { data: imageStats } = await supabase
+      .from('products')
+      .select('id, images')
+      .eq('store_id', storeId)
+      .eq('is_active', true)
+      .limit(10);
+
+    const productsWithImages = imageStats?.filter(p => 
+      p.images && Array.isArray(p.images) && p.images.length > 0
+    ) || [];
+
+    console.log(`🖼️  SYNC API: After sync - ${productsWithImages.length}/${imageStats?.length || 0} products have images`);
 
     return NextResponse.json({
       success: result.success,
       data: {
         totalProducts: result.totalProducts,
         syncedProducts: result.syncedProducts,
+        skippedProducts: result.skippedProducts,
         duration: result.duration,
         errors: result.errors,
+        invalidProducts: result.invalidProducts,
+        debug: {
+          productsWithImages: productsWithImages.length,
+          totalProductsChecked: imageStats?.length || 0,
+          sampleProductImages: imageStats?.[0]?.images || null,
+        },
       },
       error: result.success ? null : result.errors.join(', '),
     });

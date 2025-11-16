@@ -276,6 +276,15 @@ export function ProductCard({
   };
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Ignore clicks on interactive elements (button or checkbox)
+    const target = e.target as HTMLElement;
+    const clickedButton = target.closest('button');
+    const clickedCheckbox = target.closest('[data-checkbox]');
+    
+    if (clickedButton || clickedCheckbox) {
+      return;
+    }
+    
     // Open analytics panel
     if (onViewAnalytics) {
       onViewAnalytics(product.id);
@@ -301,19 +310,26 @@ export function ProductCard({
         {testBackgroundColor ? (
           // TEMPORARY TEST: Solid color background for testing visibility
           <div className="h-full w-full" style={{ backgroundColor: testBackgroundColor }} />
-        ) : product.images[0] ? (
-          <Image
-            src={product.images[0].src}
-            alt={product.title}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center bg-gradient-to-br from-muted to-muted/50">
-            <span className="text-muted-foreground text-sm">No image</span>
-          </div>
-        )}
+        ) : (() => {
+          // Try product images first, then fallback to variant images
+          const productImage = product.images?.[0];
+          const variantImage = product.variants?.find(v => v.image?.src)?.image;
+          const imageToUse = productImage || variantImage;
+          
+          return imageToUse ? (
+            <Image
+              src={imageToUse.src}
+              alt={imageToUse.alt || product.title}
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center bg-gradient-to-br from-muted to-muted/50">
+              <span className="text-muted-foreground text-sm">No image</span>
+            </div>
+          );
+        })()}
         {/* Stronger gradient overlay for guaranteed text readability - SKIP for test colors to see visibility */}
         {!testBackgroundColor && (
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/75 pointer-events-none" />
@@ -346,27 +362,23 @@ export function ProductCard({
         </div>
       </div>
 
-      {/* Clickable Overlay - z-20, sits between content (z-10) and buttons (z-30) */}
+      {/* Clickable Overlay - captures all clicks except buttons/checkboxes */}
       <div 
         className="absolute inset-0 z-20 cursor-pointer"
         style={{ pointerEvents: 'auto' }}
-        onClick={(e) => {
-          // Ignore clicks on interactive elements (button or checkbox)
-          const target = e.target as HTMLElement;
-          const clickedButton = target.closest('button');
-          const clickedCheckbox = target.closest('[data-checkbox]');
-          
-          if (clickedButton || clickedCheckbox) {
-            return;
+        onClick={handleCardClick}
+        aria-label="View product analytics"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleCardClick(e as any);
           }
-          
-          // Open analytics panel
-          handleCardClick(e);
         }}
-        aria-hidden="true"
       />
 
-      {/* Buttons - positioned absolutely to be above click overlay */}
+      {/* Buttons - positioned absolutely to be above content and overlay */}
       <div 
         className="absolute bottom-3 left-3 right-3 z-30 space-y-1.5"
         style={{ pointerEvents: 'auto' }}

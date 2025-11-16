@@ -14,15 +14,17 @@ import {
   SelectionBar,
   ProductCardSkeleton,
   ProductListSkeleton,
+  usePerformanceData,
 } from '@/features/product-management';
-import { useProducts, useStores } from '@/features/shopify-integration';
+import { useProducts, useStores, useTestSync } from '@/features/shopify-integration';
 import { 
   useSmartPricing, 
   useUndoState, 
   SmartPricingResumeModal, 
   SmartPricingConfirmDialog,
   UndoButton,
-  PowerButton 
+  PowerButton,
+  usePricingRun,
 } from '@/features/pricing-engine';
 import type { ViewMode } from '@/shared/types';
 import { Card } from '@/shared/components/ui/card';
@@ -65,9 +67,7 @@ export default function ProductsPage() {
   const [editingQuickField, setEditingQuickField] = useState<'basePrice' | 'currentPrice' | 'maxPrice' | null>(null);
   const [quickEditValue, setQuickEditValue] = useState('');
   
-  // Performance data state
-  const [performanceData, setPerformanceData] = useState<Record<string, unknown> | null>(null);
-  const [loadingPerformance, setLoadingPerformance] = useState(false);
+  // Performance data - now using React Query hook
 
   // Get stores and select the first one if none selected
   const { stores, isLoading: storesLoading } = useStores();
@@ -106,11 +106,27 @@ export default function ProductsPage() {
   const [productUpdates, setProductUpdates] = useState<Map<string, Partial<ProductWithPricing['pricing']>>>(new Map());
 
   // Get all products from the selected store
-  const { products: shopifyProducts, isLoading: productsLoading, error: productsError, syncProducts } = useProducts(selectedStoreId, {
-    search: searchQuery,
-    sortBy: filter.sortBy as any,
-    sortOrder: filter.sortDirection as any,
-  });
+  // Note: filters are now ignored - all filtering happens client-side for instant results
+  const { 
+    products: shopifyProducts, 
+    isLoading: productsLoading, 
+    error: productsError, 
+    syncProducts,
+    updateProductPrice,
+  } = useProducts(selectedStoreId);
+
+  // Performance data hook - automatically fetches when selectedProductId changes
+  const { 
+    data: performanceData, 
+    isLoading: loadingPerformance,
+    error: performanceError 
+  } = usePerformanceData(selectedProductId);
+
+  // Test sync mutation hook
+  const testSync = useTestSync();
+
+  // Pricing run mutation hook
+  const pricingRun = usePricingRun();
 
   // Transform Shopify products to ProductWithPricing format
   const allProducts: ProductWithPricing[] = useMemo(() => {
@@ -228,7 +244,7 @@ export default function ProductsPage() {
     }
   }, [searchParams]);
 
-  // Filter and sort products - compute on every render like products-test2 to avoid useEffect loops
+  // Filter and sort products - compute on every render to avoid useEffect loops
   const products = useMemo(() => {
     let filtered = applyUpdatesToProducts([...allProducts]);
 
@@ -253,13 +269,13 @@ export default function ProductsPage() {
 
     if (filter.vendors && filter.vendors.length > 0) {
       filtered = filtered.filter(product => 
-        filter.vendors!.includes(product.vendor)
+        product.vendor && filter.vendors!.includes(product.vendor)
       );
     }
 
     if (filter.productTypes && filter.productTypes.length > 0) {
       filtered = filtered.filter(product => 
-        filter.productTypes!.includes(product.productType)
+        product.productType && filter.productTypes!.includes(product.productType)
       );
     }
 
@@ -271,54 +287,59 @@ export default function ProductsPage() {
     }
 
     // Apply search filter with ranking
+    // Search should work on already-filtered products (after price, vendor, etc. filters)
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       
       // Create array with relevance scores
-      const scoredProducts = allProducts
+      // Use 'filtered' array (already filtered by price, vendor, etc.) not 'allProducts'
+      const scoredProducts = filtered
         .map(product => {
-          const title = product.title.toLowerCase();
-          const vendor = product.vendor.toLowerCase();
-          const productType = product.productType.toLowerCase();
-          const tags = product.tags.map((t: string) => t.toLowerCase());
+          // Safe null checks for all fields
+          const title = (product.title || '').toLowerCase();
+          const vendor = (product.vendor || '').toLowerCase();
+          const productType = (product.productType || '').toLowerCase();
+          const tags = (product.tags || []).map((t: string) => (t || '').toLowerCase());
           
           let score = 0;
           
           // Title scoring (use if/else to get only the highest match)
-          if (title === query) {
+          if (title && title === query) {
             score += 1000;
-          } else if (title.startsWith(query)) {
+          } else if (title && title.startsWith(query)) {
             score += 500;
-          } else if (title.includes(` ${query} `) || title.includes(` ${query}`) || title.includes(`${query} `)) {
+          } else if (title && (title.includes(` ${query} `) || title.includes(` ${query}`) || title.includes(`${query} `))) {
             score += 300;
-          } else if (title.includes(query)) {
+          } else if (title && title.includes(query)) {
             score += 200;
           }
           
           // Tag scoring (independent of title)
-          if (tags.some((tag: string) => tag === query)) {
-            score += 150;
-          } else if (tags.some((tag: string) => tag.startsWith(query))) {
-            score += 100;
-          } else if (tags.some((tag: string) => tag.includes(query))) {
-            score += 75;
+          if (tags.length > 0) {
+            if (tags.some((tag: string) => tag === query)) {
+              score += 150;
+            } else if (tags.some((tag: string) => tag.startsWith(query))) {
+              score += 100;
+            } else if (tags.some((tag: string) => tag.includes(query))) {
+              score += 75;
+            }
           }
           
           // Product type scoring (independent)
-          if (productType === query) {
+          if (productType && productType === query) {
             score += 120;
-          } else if (productType.startsWith(query)) {
+          } else if (productType && productType.startsWith(query)) {
             score += 80;
-          } else if (productType.includes(query)) {
+          } else if (productType && productType.includes(query)) {
             score += 50;
           }
           
           // Vendor scoring (independent)
-          if (vendor === query) {
+          if (vendor && vendor === query) {
             score += 100;
-          } else if (vendor.startsWith(query)) {
+          } else if (vendor && vendor.startsWith(query)) {
             score += 70;
-          } else if (vendor.includes(query)) {
+          } else if (vendor && vendor.includes(query)) {
             score += 40;
           }
           
@@ -569,8 +590,7 @@ export default function ProductsPage() {
       setCost(product.pricing.cost);
       // Reset editing state when opening modal
       setEditingQuickField(null);
-      // Fetch performance data
-      fetchPerformanceData(productId);
+      // Performance data will be fetched automatically by usePerformanceData hook
     } else {
       console.error('❌ Product not found with ID:', productId);
       console.error('❌ Requested ID type:', typeof productId, 'length:', productId?.length);
@@ -580,48 +600,18 @@ export default function ProductsPage() {
     }
   };
 
-  // Fetch performance data for selected product
-  const fetchPerformanceData = async (productId: string) => {
-    console.log('Fetching performance for product:', productId);
-    setLoadingPerformance(true);
-    try {
-      const response = await fetch(`/api/products/${productId}/performance`);
-      console.log('Performance API response status:', response.status);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
-        
-        if (response.status === 404) {
-          console.error('Product not found in database:', productId);
-          toast.error('Product data not found in database. Try syncing your products first.');
-        } else {
-          console.error('API error:', errorMessage);
-          toast.error(`Failed to fetch performance data: ${errorMessage}`);
-        }
-        setPerformanceData(null);
-        return;
-      }
-      
-      const result = await response.json();
-      console.log('Performance API result:', result);
-      
-      if (result.success && result.data) {
-        setPerformanceData(result.data);
+  // Performance data is now handled by usePerformanceData hook
+  // Error handling is done in the hook, but we can show toast for errors here if needed
+  useEffect(() => {
+    if (performanceError && selectedProductId) {
+      const errorMessage = performanceError instanceof Error ? performanceError.message : 'Unknown error';
+      if (errorMessage.includes('not found')) {
+        toast.error('Product data not found in database. Try syncing your products first.');
       } else {
-        console.error('Failed to fetch performance data:', result.error);
-        toast.error(result.error || 'Failed to fetch performance data');
-        setPerformanceData(null);
+        toast.error(`Failed to fetch performance data: ${errorMessage}`);
       }
-    } catch (error) {
-      console.error('Error fetching performance data:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Error loading performance data: ${errorMessage}`);
-      setPerformanceData(null);
-    } finally {
-      setLoadingPerformance(false);
     }
-  };
+  }, [performanceError, selectedProductId]);
 
   // Save pricing settings from analytics panel
   const handleSaveSettings = () => {
@@ -662,26 +652,30 @@ export default function ProductsPage() {
     // Only call API for currentPrice (actual Shopify price)
     // basePrice and maxPrice are local settings only
     if (editingQuickField === 'currentPrice') {
-      // Show loading toast
+      // Get first variant ID (for price update)
+      const selectedProduct = allProducts.find(p => p.id === selectedProductId);
+      if (!selectedProduct || !selectedProduct.variants || selectedProduct.variants.length === 0) {
+        toast.error('Product variant not found');
+        return;
+      }
+      
+      const variantId = selectedProduct.variants[0].id;
+      
+      if (!updateProductPrice) {
+        toast.error('Price update not available');
+        return;
+      }
+
       const loadingToast = toast.loading('Updating price...');
-
+      
       try {
-        // Call API to update Shopify and database
-        const response = await fetch(`/api/shopify/products/${selectedProductId}/price`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            price: newValue,
-            field: editingQuickField 
-          }),
+        await updateProductPrice.mutateAsync({
+          storeId: selectedStoreId,
+          productId: selectedProductId,
+          variantId: variantId,
+          price: newValue,
         });
-
-        const result = await response.json();
-
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to update price');
-        }
-
+        
         toast.dismiss(loadingToast);
         toast.success('Price updated in Shopify!');
 
@@ -695,9 +689,8 @@ export default function ProductsPage() {
           });
           return newMap;
         });
-
-        // Invalidate queries to refetch from database
-        queryClient.invalidateQueries({ queryKey: ['products', selectedStoreId] });
+        
+        // Note: Cache invalidation is handled by mutation onSuccess
         
       } catch (error) {
         toast.dismiss(loadingToast);
@@ -799,48 +792,22 @@ export default function ProductsPage() {
             
             {/* Run Pricing Now Button - MUST BE VISIBLE */}
             <Button
-              onClick={async () => {
+              onClick={() => {
                 if (!selectedStoreId) {
                   toast.error('Please select a store first');
                   return;
                 }
-                const t = toast.loading('Running pricing algorithm...');
-                try {
-                  const res = await authenticatedFetch('/api/pricing/run', { method: 'POST' });
-                  const result = await res.json();
-                  toast.dismiss(t);
-                  
-                  if (res.ok && result.success) {
-                    // Check if algorithm was skipped due to global toggle being disabled
-                    if (result.skipped) {
-                      toast.info('Pricing algorithm skipped', {
-                        description: result.message || 'Global smart pricing is disabled. Enable it to run pricing.',
-                        duration: 5000,
-                      });
-                    } else {
-                      const s = result.stats || {};
-                      // Check if any products were actually processed
-                      if (s.processed === 0) {
-                        toast.info('Pricing run completed', {
-                          description: result.message || 'No products were processed',
-                          duration: 5000,
-                        });
-                      } else {
-                        toast.success('Pricing run completed!', {
-                          description: `Processed: ${s.processed || 0}, Increased: ${s.increased || 0}, Reverted: ${s.reverted || 0}`,
-                          duration: 5000,
-                        });
-                        syncProducts.mutate(selectedStoreId);
-                      }
+                
+                pricingRun.mutate(undefined, {
+                  onSuccess: (result) => {
+                    // If products were processed, trigger sync to get updated prices
+                    if (!result.skipped && result.stats && result.stats.processed > 0) {
+                      syncProducts.mutate(selectedStoreId);
                     }
-                  } else {
-                    toast.error('Pricing run failed', { description: result.error || result.message || 'Unknown error' });
-                  }
-                } catch (e) {
-                  toast.dismiss(t);
-                  toast.error('Pricing run failed', { description: e instanceof Error ? e.message : 'Unknown error' });
-                }
+                  },
+                });
               }}
+              disabled={pricingRun.isPending}
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-md shadow-lg border-0"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
             >
@@ -864,43 +831,46 @@ export default function ProductsPage() {
               </Select>
             )}
             
-            {/* Test Layout Links */}
-            <div className="flex items-center gap-2">
-              <Link href="/products-test">
-                <Badge variant="outline" className="text-xs cursor-pointer hover:bg-accent">
-                  🧪 Accordion
-                </Badge>
-              </Link>
-              <Link href="/products-test2">
-                <Badge variant="outline" className="text-xs cursor-pointer hover:bg-accent">
-                  🧪 Slide-out
-                </Badge>
-              </Link>
-            </div>
             {/* Sync Products Button */}
             <Button
               onClick={() => {
-                if (selectedStoreId) {
-                  const loadingToast = toast.loading('Syncing products from Shopify...');
-                  syncProducts.mutate(selectedStoreId, {
-                    onSuccess: (data) => {
-                      toast.dismiss(loadingToast);
-                      if (data?.success) {
-                        toast.success(`Synced ${data.data?.syncedProducts || 0} products!`);
-                      } else {
-                        toast.error(data?.error || 'Sync failed');
-                      }
-                    },
-                    onError: (error) => {
-                      toast.dismiss(loadingToast);
-                      toast.error(`Sync failed: ${error.message}`);
-                    }
-                  });
-                } else {
+                if (!selectedStoreId) {
                   toast.error('Please select a store first');
+                  return;
                 }
+
+                // Log the storeId being used for debugging
+                console.log('🔄 Sync button clicked with storeId:', selectedStoreId);
+                
+                // Verify store exists in stores list
+                const selectedStore = stores.find(s => s.id === selectedStoreId);
+                if (!selectedStore) {
+                  console.error('❌ Selected store not found in stores list:', selectedStoreId);
+                  toast.error('Store not found', {
+                    description: 'The selected store could not be found. Please select a different store.',
+                  });
+                  return;
+                }
+
+                console.log('✅ Store found:', selectedStore.shop_domain);
+                
+                const loadingToast = toast.loading('Syncing products from Shopify...', {
+                  description: 'This may take a few moments...',
+                });
+                
+                syncProducts.mutate(selectedStoreId, {
+                  onSuccess: (data) => {
+                    toast.dismiss(loadingToast);
+                    // Detailed toast is now shown in useProducts hook onSuccess handler
+                  },
+                  onError: (error) => {
+                    toast.dismiss(loadingToast);
+                    console.error('❌ Sync mutation error:', error);
+                    // Error toast is now shown in useProducts hook onError handler
+                  }
+                });
               }}
-              disabled={productsLoading || syncProducts.isPending}
+              disabled={productsLoading || syncProducts.isPending || !selectedStoreId}
               variant="outline"
               className="gap-2"
             >
@@ -910,38 +880,15 @@ export default function ProductsPage() {
             
             {/* Test Sync Button */}
             <Button
-              onClick={async () => {
-                if (selectedStoreId) {
-                  toast.loading('Running diagnostics...');
-                  try {
-                    const response = await fetch('/api/shopify/test-sync', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ storeId: selectedStoreId }),
-                    });
-                    const result = await response.json();
-                    toast.dismiss();
-                    
-                    if (result.success) {
-                      toast.success('Diagnostics passed!', {
-                        description: `Shopify: ${result.diagnostic.productsInShopify} products, Database: ${result.diagnostic.productsInDatabase}`,
-                      });
-                      console.log('📊 Full diagnostic:', result);
-                    } else {
-                      toast.error(`Diagnostic failed at ${result.step}`, {
-                        description: result.error,
-                      });
-                      console.error('❌ Diagnostic error:', result);
-                    }
-                  } catch (error) {
-                    toast.dismiss();
-                    toast.error('Failed to run diagnostics');
-                    console.error('Diagnostic error:', error);
-                  }
-                } else {
+              onClick={() => {
+                if (!selectedStoreId) {
                   toast.error('Please select a store first');
+                  return;
                 }
+                
+                testSync.mutate(selectedStoreId);
               }}
+              disabled={testSync.isPending}
               variant="outline"
               size="sm"
               title="Test Sync Connection"
@@ -1162,9 +1109,9 @@ export default function ProductsPage() {
           <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 auto-rows-fr transition-all duration-300 ${
             showingVariantsForProduct ? 'opacity-40 pointer-events-none' : ''
           }`}>
-            {products.map((product) => (
+            {products.map((product, index) => (
               <ProductCard
-                key={product.id}
+                key={product.id || `fallback-${index}`}
                 product={product}
                 isSelected={selectedIds.has(product.id)}
                 onSelect={handleSelect}

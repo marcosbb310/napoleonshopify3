@@ -6,5 +6,6 @@ export * from './services/syncOrders';
 export * from './services/storeAnalytics';
 export * from './hooks/useStores';
 export * from './hooks/useProducts';
+export * from './hooks/useTestSync';
 export * from './hooks/useStoreData';
 export * from './components/StoreConnectionCard';

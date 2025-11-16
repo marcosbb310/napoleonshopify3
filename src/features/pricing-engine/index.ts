@@ -14,6 +14,7 @@ export {
   useResumeProduct,
   useUndo 
 } from './hooks/useSmartPricingMutations';
+export { usePricingRun } from './hooks/usePricingRun';
 export { SmartPricingResumeModal } from './components/SmartPricingResumeModal';
 export { SmartPricingConfirmDialog } from './components/SmartPricingConfirmDialog';
 export { UndoButton } from './components/UndoButton';

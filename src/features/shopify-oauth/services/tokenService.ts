@@ -60,16 +60,17 @@ export async function encryptAndStoreTokens(
     throw new Error(`Failed to encrypt token: ${encryptError?.message}`);
   }
   
-  // Check if store already exists for this user
-  const { data: existingStore } = await supabase
+  // SECURITY: Prevent duplicate stores and unauthorized reassignment
+  // Step 1: Check if store exists for THIS user (safe to update)
+  const { data: existingStoreForUser } = await supabase
     .from('stores')
-    .select('id')
+    .select('id, user_id, is_active')
     .eq('shop_domain', shopDomain)
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
   
-  if (existingStore) {
-    // Update existing store
+  if (existingStoreForUser) {
+    // Store exists for this user - safe to update (reconnect)
     const { error: updateError } = await supabase
       .from('stores')
       .update({
@@ -77,38 +78,56 @@ export async function encryptAndStoreTokens(
         access_token_encrypted: encryptedToken,
         scope: tokens.scope,
         last_synced_at: new Date().toISOString(),
-        is_active: true,
+        is_active: true, // Reactivate if it was deactivated
         updated_at: new Date().toISOString(),
       })
-      .eq('id', existingStore.id);
+      .eq('id', existingStoreForUser.id);
     
     if (updateError) {
       throw new Error(`Failed to update store: ${updateError.message}`);
     }
     
-    return existingStore.id;
-  } else {
-    // Create new store
-    const { data: newStore, error: insertError } = await supabase
-      .from('stores')
-      .insert({
-        user_id: userId,
-        shop_domain: shopDomain,
-        access_token: tokens.accessToken, // Keep for backward compatibility
-        access_token_encrypted: encryptedToken,
-        scope: tokens.scope,
-        installed_at: new Date().toISOString(),
-        is_active: true,
-      })
-      .select('id')
-      .single();
-    
-    if (insertError || !newStore) {
-      throw new Error(`Failed to create store: ${insertError?.message}`);
-    }
-    
-    return newStore.id;
+    return existingStoreForUser.id;
   }
+  
+  // Step 2: Check if store exists for ANY other user (prevent duplicate/unauthorized reassignment)
+  const { data: existingStoreForOtherUser } = await supabase
+    .from('stores')
+    .select('id, user_id, is_active')
+    .eq('shop_domain', shopDomain)
+    .neq('user_id', userId) // Different user
+    .maybeSingle();
+  
+  if (existingStoreForOtherUser) {
+    // CRITICAL: Store already exists for another user - prevent duplicate creation
+    // This is a security/data integrity issue - don't create duplicate stores
+    throw new Error(
+      `This Shopify store is already connected to another account. ` +
+      `If you believe this is an error, please contact support. ` +
+      `To reconnect your store, please disconnect it first from the other account.`
+    );
+  }
+  
+  // Step 3: Store doesn't exist at all - safe to create new one
+  const { data: newStore, error: insertError } = await supabase
+    .from('stores')
+    .insert({
+      user_id: userId,
+      shop_domain: shopDomain,
+      access_token: tokens.accessToken, // Keep for backward compatibility
+      access_token_encrypted: encryptedToken,
+      scope: tokens.scope,
+      installed_at: new Date().toISOString(),
+      is_active: true,
+    })
+    .select('id')
+    .single();
+  
+  if (insertError || !newStore) {
+    throw new Error(`Failed to create store: ${insertError?.message}`);
+  }
+  
+  return newStore.id;
 }
 
 /**

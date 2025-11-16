@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireStore } from '@/shared/lib/apiAuth';
+import { createAdminClient } from '@/shared/lib/supabase';
 
 export async function GET(request: NextRequest) {
+  console.log('🖼️🖼️🖼️ [API] /api/shopify/products GET called 🖼️🖼️🖼️');
   try {
     // NEW AUTH: Require authenticated store
     const { user, store, error } = await requireStore(request);
     if (error) return error;
 
-    console.log('🔍 Fetching products for store:', {
+    console.log('🔍 [API] Fetching products for store:', {
       storeId: store.id,
       shopDomain: store.shop_domain,
       hasToken: !!store.access_token,
@@ -59,24 +61,49 @@ export async function GET(request: NextRequest) {
 
     const data = await res.json();
     
+    // DEBUG: Check what Shopify is returning for images
+    if (data.products && data.products.length > 0) {
+      const firstProduct = data.products[0] as Record<string, unknown>;
+      console.log('🖼️ [API] First product from Shopify:', {
+        title: firstProduct.title,
+        hasImages: !!firstProduct.images,
+        imagesType: typeof firstProduct.images,
+        imagesIsArray: Array.isArray(firstProduct.images),
+        imageCount: Array.isArray(firstProduct.images) ? firstProduct.images.length : 0,
+        firstImage: Array.isArray(firstProduct.images) && firstProduct.images.length > 0 ? firstProduct.images[0] : null,
+      });
+    }
+    
     // Transform Shopify API response to match our expected format
-    const transformedProducts = data.products?.map((product: Record<string, unknown>) => ({
-      id: product.id.toString(),
-      title: product.title,
-      handle: product.handle,
-      description: product.body_html || '',
-      vendor: product.vendor || '',
-      productType: product.product_type || '',
-      tags: product.tags ? product.tags.split(',').map((tag: string) => tag.trim()) : [],
-      status: product.status as 'active' | 'draft' | 'archived',
-      images: product.images?.map((image: Record<string, unknown>) => ({
+    const transformedProducts = data.products?.map((product: Record<string, unknown>) => {
+      const images = product.images?.map((image: Record<string, unknown>) => ({
         id: image.id.toString(),
         productId: product.id.toString(),
         src: image.src,
         alt: image.alt || '',
         width: image.width || 800,
         height: image.height || 800,
-      })) || [],
+      })) || [];
+      
+      // DEBUG: Log transformed images for first product
+      if (product === data.products[0]) {
+        console.log('🖼️ [API] Transformed images for first product:', {
+          title: product.title,
+          imageCount: images.length,
+          firstImage: images[0] || null,
+        });
+      }
+      
+      return {
+        id: product.id.toString(),
+        title: product.title,
+        handle: product.handle,
+        description: product.body_html || '',
+        vendor: product.vendor || '',
+        productType: product.product_type || '',
+        tags: product.tags ? product.tags.split(',').map((tag: string) => tag.trim()) : [],
+        status: product.status as 'active' | 'draft' | 'archived',
+        images,
       variants: product.variants?.map((variant: Record<string, unknown>) => {
         // Validate and sanitize price values
         const price = parseFloat(variant.price) || 0;
@@ -110,9 +137,109 @@ export async function GET(request: NextRequest) {
           updatedAt: variant.updated_at,
         };
       }) || [],
-      createdAt: product.created_at,
-      updatedAt: product.updated_at,
-    })) || [];
+        createdAt: product.created_at,
+        updatedAt: product.updated_at,
+      };
+    }) || [];
+
+    // CRITICAL: Lookup dbId from database for each product
+    // This allows frontend to use dbId for API calls
+    const supabaseAdmin = createAdminClient();
+    const shopifyIds = transformedProducts.map(p => p.id);
+    
+    console.log('🔍 [API] Looking up dbIds for products:', {
+      totalProductsFromShopify: transformedProducts.length,
+      shopifyIdsCount: shopifyIds.length,
+      sampleShopifyIds: shopifyIds.slice(0, 3),
+      storeId: store.id,
+      storeDomain: store.shop_domain,
+    });
+    
+    if (shopifyIds.length > 0) {
+      const { data: dbProducts, error: dbError } = await supabaseAdmin
+        .from('products')
+        .select('id, shopify_id')
+        .eq('store_id', store.id)
+        .in('shopify_id', shopifyIds);
+      
+      if (dbError) {
+        console.error('❌ [API] Failed to lookup dbIds from database:', {
+          error: dbError.message,
+          code: dbError.code,
+          details: dbError.details,
+          hint: dbError.hint,
+          storeId: store.id,
+          shopifyIdsCount: shopifyIds.length,
+        });
+        // Continue without dbId lookup - return products without dbId
+      } else {
+        // Create a map for quick lookup: shopify_id → dbId (UUID)
+        const dbIdMap = new Map(
+          dbProducts?.map(p => [p.shopify_id, p.id]) || []
+        );
+        
+        console.log('📊 [API] Database lookup results:', {
+          productsFoundInDb: dbProducts?.length || 0,
+          productsFromShopify: shopifyIds.length,
+          matchRate: dbProducts?.length ? `${((dbProducts.length / shopifyIds.length) * 100).toFixed(1)}%` : '0%',
+          storeId: store.id,
+        });
+        
+        if (dbProducts && dbProducts.length > 0) {
+          console.log('🔍 [API] Sample database products:', dbProducts.slice(0, 3).map(p => ({
+            dbId: p.id,
+            shopify_id: p.shopify_id,
+          })));
+        } else {
+          console.warn('⚠️ [API] NO products found in database for this store!', {
+            storeId: store.id,
+            storeDomain: store.shop_domain,
+            shopifyIdsCount: shopifyIds.length,
+            message: 'Products need to be synced to database first. Run a product sync.',
+          });
+        }
+        
+        // Add dbId to each product
+        const productsWithDbId = transformedProducts.map(product => ({
+          ...product,
+          dbId: dbIdMap.get(product.id) || null,  // Add dbId (UUID) or null if not in database
+        }));
+        
+        // Count products with and without dbId
+        const withDbId = productsWithDbId.filter(p => p.dbId);
+        const withoutDbId = productsWithDbId.filter(p => !p.dbId);
+        
+        console.log('✅ [API] Final product breakdown:', {
+          totalProducts: productsWithDbId.length,
+          withDbId: withDbId.length,
+          withoutDbId: withoutDbId.length,
+          dbIdCoverage: `${((withDbId.length / productsWithDbId.length) * 100).toFixed(1)}%`,
+        });
+        
+        // Log sample to verify
+        if (withDbId.length > 0) {
+          const sample = withDbId[0];
+          console.log('✅ [API] Sample product WITH dbId:', {
+            title: sample.title,
+            id: sample.id,  // Shopify ID
+            dbId: sample.dbId,  // Database UUID
+            dbIdIsUUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sample.dbId || ''),
+          });
+        }
+        
+        if (withoutDbId.length > 0) {
+          const sample = withoutDbId[0];
+          console.warn('⚠️ [API] Sample product WITHOUT dbId:', {
+            title: sample.title,
+            id: sample.id,  // Shopify ID
+            dbId: sample.dbId,  // Should be null
+            message: 'This product is not in your database. Run a product sync.',
+          });
+        }
+        
+        return NextResponse.json({ success: true, data: productsWithDbId }, { status: 200 });
+      }
+    }
 
     return NextResponse.json({ success: true, data: transformedProducts }, { status: 200 });
   } catch (error) {

@@ -75,26 +75,53 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="flex items-center gap-2 h-auto py-2">
-          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="text-sm font-medium">{user?.name?.[0] || 'D'}</span>
+        <Button variant="ghost" className="flex items-center gap-3 h-auto py-2 pl-2 pr-3">
+          <div
+            className="h-9 w-9 rounded-full felt-stitched flex items-center justify-center"
+            style={{
+              background:
+                'linear-gradient(150deg, rgba(34, 54, 81, 0.82), rgba(26, 45, 69, 0.96))',
+              boxShadow:
+                'inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 6px 12px -10px rgba(2, 5, 9, 0.8)',
+            }}
+          >
+            <span className="text-sm font-semibold text-[rgb(243,241,234)]">
+              {user?.name?.[0] || 'D'}
+            </span>
           </div>
           <div className="hidden md:flex flex-col items-start">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium leading-none">{user?.name || 'Demo User'}</span>
+              <span className="text-sm font-medium leading-none text-[rgb(243,241,234)]">
+                {user?.name || 'Demo User'}
+              </span>
               {userPlan.tier === 'pro' && (
-                <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4">Pro</Badge>
+                <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4">
+                  Pro
+                </Badge>
               )}
               {userPlan.tier === 'enterprise' && (
-                <Badge variant="default" className="text-xs px-1.5 py-0 h-4">Enterprise</Badge>
+                <Badge variant="default" className="text-xs px-1.5 py-0 h-4">
+                  Enterprise
+                </Badge>
               )}
             </div>
-            <span className="text-xs text-muted-foreground">{user?.email || 'demo@example.com'}</span>
+            <span className="text-xs text-[rgba(243,241,234,0.68)]">
+              {user?.email || 'demo@example.com'}
+            </span>
           </div>
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          <ChevronDown className="felt-icon h-4 w-4 text-[rgba(243,241,234,0.72)]" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72">
+      <DropdownMenuContent
+        align="end"
+        className="w-72 border"
+        style={{
+          background:
+            'linear-gradient(165deg, rgba(26, 45, 69, 0.95), rgba(21, 37, 57, 0.98))',
+          borderColor: 'rgba(240, 237, 224, 0.18)',
+          boxShadow: '0 18px 32px -28px rgba(2, 5, 9, 0.88)',
+        }}
+      >
         {/* User Info Header */}
         <DropdownMenuLabel>
           <div className="flex flex-col space-y-2">

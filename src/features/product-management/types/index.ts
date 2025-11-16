@@ -44,3 +44,5 @@ export interface ProductSelection {
   selectedIds: Set<string>;
   selectAll: boolean;
 }
+
+export { type SyncActivityEntry, type SyncActivitySource, type SyncActivityStatus } from './syncActivity.types';

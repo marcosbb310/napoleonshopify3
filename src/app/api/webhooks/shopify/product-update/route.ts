@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/shared/lib/supabase';
 import { logger } from '@/shared/lib/logger';
 import crypto from 'crypto';
+import { normalizeShopifyId } from '@/shared/utils/shopifyIdNormalizer';
 
 /**
  * Shopify Product Update Webhook Handler
@@ -58,7 +59,22 @@ export async function POST(request: NextRequest) {
     // Parse product data
     const product = JSON.parse(body);
     const webhookId = request.headers.get('x-shopify-webhook-id');
-    logger.info(`Product update webhook received: ${product.title} (ID: ${product.id})`, {
+    
+    // Validate and normalize product ID
+    const normalizedProductId = normalizeShopifyId(product.id);
+    if (!normalizedProductId) {
+      logger.error('Webhook rejected product with invalid ID', { 
+        webhookId,
+        productTitle: product.title,
+        rawId: product.id,
+      });
+      return NextResponse.json(
+        { error: 'Invalid product ID' }, 
+        { status: 400 }
+      );
+    }
+    
+    logger.info(`Product update webhook received: ${product.title} (ID: ${normalizedProductId})`, {
       webhookId,
     });
 
@@ -119,7 +135,7 @@ export async function POST(request: NextRequest) {
         payload_hash: crypto.createHash('sha256').update(body).digest('hex'),
       });
 
-    // Update pricing_config in database
+    // Update pricing_config in database using normalized ID
     const { data, error } = await supabaseAdmin
       .from('pricing_config')
       .update({
@@ -127,7 +143,7 @@ export async function POST(request: NextRequest) {
         last_price_change_date: new Date().toISOString(),
         next_price_change_date: nextPriceChangeDate.toISOString(),
       })
-      .eq('shopify_product_id', product.id.toString())
+      .eq('shopify_product_id', normalizedProductId)
       .select();
 
     if (error) {
@@ -139,18 +155,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (!data || data.length === 0) {
-      logger.warn(`No pricing config found for product ${product.id}`, { webhookId, storeId: store.id });
+      logger.warn(`No pricing config found for product ${normalizedProductId}`, { webhookId, storeId: store.id });
       return NextResponse.json({ 
         warning: 'Product not in smart pricing system' 
       });
     }
 
-    logger.info(`Pricing cycle reset for product ${product.id}`, { webhookId, storeId: store.id });
+    logger.info(`Pricing cycle reset for product ${normalizedProductId}`, { webhookId, storeId: store.id });
     logger.info(`Next price change: ${nextPriceChangeDate.toISOString()}`, { webhookId, storeId: store.id });
 
     return NextResponse.json({
       success: true,
-      productId: product.id,
+      productId: normalizedProductId,
       newPrice,
       nextPriceChangeDate: nextPriceChangeDate.toISOString(),
     });

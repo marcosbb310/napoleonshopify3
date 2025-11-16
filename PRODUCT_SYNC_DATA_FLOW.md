@@ -7,27 +7,85 @@ This document outlines the COMPLETE step-by-step data flow for syncing products 
 
 ## Step-by-Step Flow
 
-### 1. USER INTERACTION (Frontend)
+### 1. USER INTERACTION & TOAST ORCHESTRATION (Frontend)
 **Location:** `src/app/(app)/products/page.tsx`
 
 ```
 User clicks "Sync Products" button
   ↓
-onClick handler triggers
+`triggerProductSync(selectedStoreId, 'manual')`
   ↓
-syncProducts.mutate(selectedStoreId, { callbacks })
+`SyncToastManager.showLoading(...)`
+  ↓
+React Query mutation executes
 ```
 
-**Current Code:**
+**Key UI surfaces**
+- `SyncToastManager` (feature utility) owns loading/success/warning/error toasts with extended durations and “View details” CTA.
+- `SyncActivityPanel` (modal) stores the last 10 runs; toasts deep-link into the panel for historical review.
+
+**Trigger snippet**
 ```typescript
-syncProducts.mutate(selectedStoreId, {
-  onSuccess: (data) => {
-    toast.success(`Synced ${data.data?.syncedProducts || 0} products!`);
+const triggerProductSync = useCallback(
+  (storeId: string, source: SyncActivitySource, options?: { message?: string }) => {
+    const startedAt = new Date().toISOString();
+    toastManager.showLoading({ message: options?.message ?? 'Syncing products from Shopify...' });
+
+    syncProducts.mutate(storeId, {
+      onSuccess: (result) => {
+        const data = result.data ?? { totalProducts: 0, syncedProducts: 0, duration: 0, errors: [] };
+        const entryErrors =
+          data.errors.length > 0 ? data.errors : result.error ? [result.error] : [];
+
+        const entry: SyncActivityEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          storeId,
+          status: result.success
+            ? 'success'
+            : deriveStatusFromResult(entryErrors, data.syncedProducts ?? 0),
+          source,
+          startedAt: result.startedAt ?? startedAt,
+          completedAt: result.completedAt ?? new Date().toISOString(),
+          totalProducts: data.totalProducts ?? 0,
+          syncedProducts: data.syncedProducts ?? 0,
+          duration: data.duration ?? 0,
+          errors: entryErrors,
+          errorMessage: result.success ? null : result.error ?? null,
+          message: result.success
+            ? 'Sync completed successfully.'
+            : result.error ?? entryErrors[0] ?? 'Sync completed with issues.',
+        };
+
+        pushHistoryEntry(entry);
+        toastManager.notify(entry, {
+          retry: entry.status === 'success' ? undefined : () => triggerProductSync(storeId, source, options),
+        });
+      },
+      onError: (error) => {
+        const entry: SyncActivityEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          storeId,
+          status: 'error',
+          source,
+          startedAt,
+          completedAt: new Date().toISOString(),
+          totalProducts: 0,
+          syncedProducts: 0,
+          duration: 0,
+          errors: [error.message],
+          errorMessage: error.message,
+          message: error.message,
+        };
+
+        pushHistoryEntry(entry);
+        toastManager.notify(entry, {
+          retry: () => triggerProductSync(storeId, source, options),
+        });
+      },
+    });
   },
-  onError: (error) => {
-    toast.error(`Sync failed: ${error.message}`);
-  }
-});
+  [syncProducts, toastManager, pushHistoryEntry]
+);
 ```
 
 ---
@@ -37,30 +95,33 @@ syncProducts.mutate(selectedStoreId, {
 
 ```typescript
 const syncProducts = useMutation({
-  mutationFn: async (storeId: string) => {
-    // Fetch API route
+  mutationFn: async (storeId: string): Promise<SyncMutationResult> => {
+    const startedAt = new Date().toISOString();
     const response = await fetch('/api/shopify/sync', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ storeId }),
     });
 
-    const result = await response.json();
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      const contentType = response.headers.get('content-type');
 
-    if (!result.success) {
-      throw new Error(result.error || 'Product sync failed');
+      if (contentType?.includes('application/json')) {
+        const errorData = await response.json().catch(() => null);
+        errorMessage = errorData?.error || errorMessage;
+      } else {
+        errorMessage = `Route not found. Please ensure the sync API route is available. (HTTP ${response.status})`;
+      }
+
+      throw new Error(errorMessage);
     }
 
-    return result;
+    const result: SyncProductsResponse = await response.json();
+    return { ...result, startedAt, completedAt: new Date().toISOString() };
   },
   onSuccess: () => {
-    // Invalidate React Query cache to refetch products
     queryClient.invalidateQueries({ queryKey: ['products'] });
-  },
-  onError: (error) => {
-    toast.error(`Product sync failed: ${error.message}`);
   },
 });
 ```
@@ -322,11 +383,9 @@ Products displayed with new data
 - **Database Error:** Return 500, log error
 
 ### React Query Handling
-```typescript
-onError: (error) => {
-  toast.error(`Product sync failed: ${error.message}`);
-}
-```
+- The mutation no longer emits toasts directly.
+- Loading/success/error messaging is owned by `SyncToastManager` inside `triggerProductSync`.
+- Query invalidation still runs in `onSuccess` to keep the product list fresh.
 
 ---
 
@@ -334,9 +393,10 @@ onError: (error) => {
 
 ### ✅ WORKING COMPONENTS:
 
-1. **User Interaction** (`src/app/(app)/products/page.tsx:778`)
+1. **User Interaction** (`src/app/(app)/products/page.tsx`)
    - Button click handler ✅
-   - Calls `syncProducts.mutate(selectedStoreId)` ✅
+   - Calls `triggerProductSync(selectedStoreId, source)` ✅
+   - Centralized toast + history handling via `SyncToastManager` ✅
 
 2. **React Query Hook** (`src/features/shopify-integration/hooks/useProducts.ts`)
    - FIXED: Now calls `/api/shopify/sync` ✅

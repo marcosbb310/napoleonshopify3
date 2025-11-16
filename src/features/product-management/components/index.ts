@@ -5,3 +5,5 @@ export * from './BulkEditToolbar';
 export * from './ProductFilters';
 export * from './SelectionBar';
 export * from './ProductCardSkeleton';
+export * from './SyncToastContent';
+export * from './SyncActivityPanel';

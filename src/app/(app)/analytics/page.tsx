@@ -315,10 +315,10 @@ export default function AnalyticsPage() {
     // Create array with relevance scores
     const scoredProducts = individualProducts
       .map(product => {
-        const name = (product.name as string).toLowerCase();
-        const vendor = product.vendor.toLowerCase();
-        const productType = product.productType.toLowerCase();
-        const tags = product.tags.map(t => t.toLowerCase());
+        const name = (product.name as string || '').toLowerCase();
+        const vendor = (product.vendor || '').toLowerCase();
+        const productType = (product.productType || '').toLowerCase();
+        const tags = (product.tags || []).map(t => (t || '').toLowerCase());
         
         let score = 0;
         

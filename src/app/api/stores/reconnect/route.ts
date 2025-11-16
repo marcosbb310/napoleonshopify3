@@ -94,15 +94,17 @@ export async function POST(request: NextRequest) {
       logger.info('Product sync retried', { 
         storeId: store.id, 
         success: result.success,
-        synced: result.synced 
+        syncedProducts: result.syncedProducts,
+        skippedProducts: result.skippedProducts,
       });
 
       return NextResponse.json({
         success: result.success,
         message: result.success 
-          ? `Synced ${result.synced} products` 
+          ? `Synced ${result.syncedProducts} products${result.skippedProducts > 0 ? `, ${result.skippedProducts} skipped` : ''}` 
           : 'Sync failed',
         errors: result.errors,
+        skippedProducts: result.skippedProducts,
       });
     }
 

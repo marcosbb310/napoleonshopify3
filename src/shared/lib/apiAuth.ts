@@ -19,16 +19,38 @@ export async function requireAuth(request: NextRequest) {
   return { user, error: null }
 }
 
-export async function requireStore(request: NextRequest) {
+export async function requireStore(
+  request: NextRequest, 
+  options?: { allowBody?: boolean; storeId?: string }
+) {
   const { user, error } = await requireAuth(request)
   if (error) return { user: null, store: null, error }
   
-  const storeId = request.headers.get('x-store-id')
+  // Use provided storeId if available (avoids body consumption issues)
+  let storeId = options?.storeId
+  
+  // Try header if storeId not provided
+  if (!storeId) {
+    storeId = request.headers.get('x-store-id')
+  }
+  
+  // Fallback to body if header missing and option enabled
+  if (!storeId && options?.allowBody) {
+    try {
+      const body = await request.json()
+      storeId = body.storeId
+    } catch {
+      // Body parsing failed, continue with null check below
+    }
+  }
+  
   if (!storeId) {
     return { 
       user, 
       store: null, 
-      error: NextResponse.json({ error: 'x-store-id header required' }, { status: 400 }) 
+      error: NextResponse.json({ 
+        error: 'x-store-id header required' + (options?.allowBody ? ' (or storeId in body/options)' : '') 
+      }, { status: 400 }) 
     }
   }
   
@@ -50,18 +72,41 @@ export async function requireStore(request: NextRequest) {
     }
   }
   
+  // Single query with all conditions (store exists, belongs to user, and is active)
   const { data: store, error: storeError } = await supabaseAdmin
     .from('stores')
     .select('*')
     .eq('id', storeId)
     .eq('user_id', userProfile.id)
+    .eq('is_active', true)
     .single()
   
-  if (storeError || !store) {
+  if (storeError) {
+    console.error('❌ requireStore: Store query error:', {
+      storeId,
+      userId: userProfile.id,
+      error: storeError,
+    });
     return { 
       user, 
       store: null, 
-      error: NextResponse.json({ error: 'Store not found or access denied' }, { status: 404 }) 
+      error: NextResponse.json({ 
+        error: 'Store not found, inactive, or access denied',
+        details: storeError.message 
+      }, { status: 404 }) 
+    }
+  }
+  
+  if (!store) {
+    console.error('❌ requireStore: Store not found:', {
+      storeId,
+      userId: userProfile.id,
+      queryConditions: { id: storeId, user_id: userProfile.id, is_active: true },
+    });
+    return { 
+      user, 
+      store: null, 
+      error: NextResponse.json({ error: 'Store not found, inactive, or access denied' }, { status: 404 }) 
     }
   }
   

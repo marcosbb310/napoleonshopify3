@@ -5,8 +5,8 @@ export interface ShopifyProduct {
   title: string;
   handle: string;
   description: string;
-  vendor: string;
-  productType: string;
+  vendor: string | null;
+  productType: string | null;
   tags: string[];
   status: 'active' | 'draft' | 'archived';
   images: ShopifyImage[];
